@@ -1,0 +1,19 @@
+networking/
+├── __init__.py
+├── node.py              # Node class (main network interface)
+├── peer.py              # Peer class (per-connection state)
+├── messages/
+│   ├── __init__.py      # Exports all message types
+│   ├── envelope.py      # MessageEnvelope (header handling)
+│   ├── parser.py        # MessageParser (deserialization)
+│   ├── types/
+│   │   ├── version.py   # VersionMessage
+│   │   ├── addr.py      # AddrMessage
+│   │   ├── tx.py        # TxMessage
+│   │   └── ...         # Other message types
+│   └── processor.py     # MessageProcessor (handler logic)
+├── chain/
+│   ├── manager.py       # ChainManager
+│   └── validation.py    # BlockValidator
+├── inventory.py         # InventoryManager
+└── constants.py         # Network magic, protocol versions

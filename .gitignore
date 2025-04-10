@@ -1,0 +1,6 @@
+# Ignore all hidden folders
+.*/
+
+# Ignore Python bytecode cache
+__pycache__/
+*.py[cod]
