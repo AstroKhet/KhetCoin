@@ -61,76 +61,107 @@ def get_highest_block_height() -> int:
 
 
 def save_block(block_header: bytes, raw_txs: List[bytes]):
+    """
+    Saves a block and its transactions to the blockchain database.
+
+    Args:
+        block_header: The 80-byte block header
+        raw_txs: List of serialized transactions
+
+    Raises:
+        ValueError: If the block header is invalid or block size exceeds limits
+    """
+    # Validate inputs
     if len(block_header) != 80:
         raise ValueError("Block header must be 80 bytes long")
 
     block_size = len(block_header) + sum(map(len, raw_txs))
-    if block_size > 1_000_000: # 1MB
+    if block_size > 1_000_000:  # 1MB
         raise ValueError("Block size cannot exceed 1 MB")
 
+    # Calculate block hash early to check if it already exists
+    block_hash = HASH256(block_header)[::-1]  # Convert to LE for storage
+
+    # Check if block already exists in database
+    with BLK_ENV.begin() as blk_db:
+        if blk_db.get(block_hash) is not None:
+            raise ValueError(f"Block {block_hash.hex()} already exists in database")
+
+    # Get current state
     dat_file_no = get_latest_dat_file_no()
+    height = get_highest_block_height() + 1
+    timestamp = block_header[-12:-8]  # Extract timestamp from header
+
+    # Prepare block data without transactions
+    block_data_without_tx = (
+        MAGIC + itole(block_size, 4) + block_header + encode_varint(len(raw_txs))
+    )
+
+    # Get or create appropriate dat file
     dat_file = os.path.join(DAT_FILE_DIR, f"blk{dat_file_no:08}.dat")
-    os.makedirs(DAT_FILE_DIR, exist_ok=True)  # Ensure the blocks directory exists
-    if not os.path.exists(dat_file):  # If the file itself doesn’t exist yet
-        open(dat_file, "wb").close()  #   create an empty one
+    if not os.path.exists(dat_file):
+        open(dat_file, "wb").close()
 
-    # Block data format before transactions:
-    # <MAGIC>         - 4B  - BE
-    # <block_size>    - 4B  - LE
-    # <block_header>  - 80B - BE
-    # <num_tx>        - Varint
-    block_data_without_tx = (MAGIC 
-        + itole(block_size, 4) 
-        + block_header 
-        + encode_varint(len(raw_txs)))
-
+    # Check if we need a new file due to size limit
     if os.path.getsize(dat_file) + len(block_data_without_tx) > MAX_OFFSET:
         dat_file_no += 1
         dat_file = os.path.join(DAT_FILE_DIR, f"blk{dat_file_no:08}.dat")
         open(dat_file, "wb").close()
 
+    # Write block header and prepare transaction hashes
+    tx_hashes = []
+    block_offset = 0
+    tx_offsets = []
+
+    # Use a single file handle for all operations on this file
     with open(dat_file, "ab") as dat:
-        offset = dat.tell()
+        # Write block header and get its offset
+        block_offset = dat.tell()
         dat.write(block_data_without_tx)
 
-    # Store block metadata in BLK_ENV LMDB:
-    # <block_hash>    - 32B - LE
-    # ::::::::::::::::::::::::::
-    # <dat_file_no>   - 4B  - LE
-    # <offset>        - 4B  - LE
-    # <block_size>    - 4B  - LE
-    # <height>        - 4B  - LE
-    # <timestamp>     - 4B  - LE
-    height = get_highest_block_height() + 1
-    with BLK_ENV.begin(write=True) as blk_db:
-        key = HASH256(block_header)[::-1]
-        value = (itole(dat_file_no, 4)
-                 + itole(offset, 4)
-                 + itole(block_size, 4)
-                 + itole(height, 4)
-                 + block_header[-12:-8]) # timestamp
-        blk_db.put(key, value)
+        # Write transactions and collect their offsets
+        for raw_tx in raw_txs:
+            tx_offset = dat.tell()
+            dat.write(raw_tx)
+            tx_offsets.append(tx_offset)
+            tx_hashes.append(HASH256(raw_tx)[::-1])  # Convert to LE for storage
 
-    # <tx_hash>       - 32B - LE
-    # ::::::::::::::::::::::::::
-    # <dat_file_no>   - 4B  - LE
-    # <offset>        - 4B  - LE
-    with TXN_ENV.begin(write=True) as txn_db:
-        tx_hashes = [HASH256(raw_tx)[::-1] for raw_tx in raw_txs]
+    # Now update all databases in a single transaction for atomicity
+    try:
+        # Use a write transaction for each database - if any fails, all are rolled back
+        with BLK_ENV.begin(write=True) as blk_db, TXN_ENV.begin(
+            write=True
+        ) as txn_db, HEIGHT_ENV.begin(write=True) as height_db:
 
-        for tx_hash, raw_tx in zip(tx_hashes, raw_txs):
-            with open(dat_file, "ab") as dat:
-                offset = dat.tell()
-                dat.write(raw_tx)
+            # Store block metadata
+            blk_value = (
+                itole(dat_file_no, 4)  # dat file number
+                + itole(block_offset, 4)  # offset in file
+                + itole(block_size, 4)  # total block size
+                + itole(height, 4)  # block height
+                + timestamp  # block timestamp
+            )
+            blk_db.put(block_hash, blk_value)
 
-                key = tx_hash
-                value = itole(dat_file_no) + itole(offset)
-                txn_db.put(key, value)
+            # Store transaction locations
+            for tx_hash, tx_offset in zip(tx_hashes, tx_offsets):
+                tx_value = itole(dat_file_no) + itole(tx_offset)
+                txn_db.put(tx_hash, tx_value)
 
-    with HEIGHT_ENV.begin(write=True) as height_db:
-        height_db.put(itole(height), HASH256(block_header)[::-1])
+            # Update block height index
+            height_db.put(itole(height), block_hash)
 
-    print(f"Block saved at height {height} in file {dat_file_no:08}.dat")
+    except lmdb.Error as e:
+        # Log the error
+        print(f"Database error while saving block: {e}")
+        # Could potentially attempt to remove the written data from the dat file
+        # but that's complex and could cause more issues
+        raise
+
+    print(
+        f"Block {block_hash.hex()} saved at height {height} in file {dat_file_no:08}.dat"
+    )
+    return block_hash  # Return the hash for convenience
 
 
 def get_block_io(block_hash: bytes) -> BinaryIO:

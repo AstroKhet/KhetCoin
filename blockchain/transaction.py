@@ -1,5 +1,6 @@
 from typing import List, BinaryIO, Optional
 from coincurve import PrivateKey
+from numpy import isin
 
 from blockchain.script import *
 from utils.helper import *
@@ -233,8 +234,10 @@ class Transaction:
 
     def coinbase_height(self) -> int:
         if not self.is_coinbase():
-            raise ValueError("Not a valid coinbase transaction.")
+            raise ValueError("Invalid coinbase transaction.")
         
+        if isinstance(self.inputs[0].script_sig.commands[0], int):
+            raise ValueError("No op_codes should be in coinbase script_sig.")
         height = letoi(self.inputs[0].script_sig.commands[0])
         return height       
 
@@ -244,11 +247,28 @@ class Transaction:
 
     ######################################################
     def fee(self) -> int:
+        if self.is_coinbase():
+            return 0
+        
         value_in = sum(tx_in.value() for tx_in in self.inputs)
         value_out = sum(tx_out.value for tx_out in self.outputs)
         
         return value_in - value_out  # should be >0
 
 
-def create_coinbase_transaction():
-    return
+def create_coinbase_tx(height: int, pubkey: bytes, custom_message=None) -> Transaction:
+    """Creates a coinbase transaction with the given height and public key."""
+    if custom_message:
+        script_sig = Script([itole(height), pubkey, custom_message])
+    else:
+        script_sig = Script([itole(height), pubkey])
+        
+    tx_in = TransactionInput(
+        prev_hash=bytes.fromhex("00" * 32),
+        prev_index=0xffffffff,
+        script_sig=script_sig,
+        sequence=0xffffffff,
+    )
+    
+    tx_out = TransactionOutput(value=50, script_pubkey=Script([pubkey]))
+    return Transaction(version=1, inputs=[tx_in], outputs=[tx_out], locktime=0)

@@ -139,8 +139,3 @@ class Node:
             server_task.cancel()
             processor_task.cancel()
 
-
-if __name__ == "__main__":
-    node = Node(name="Alice", host="127.0.0.1", port=50000)
-
-    asyncio.run(node.run())

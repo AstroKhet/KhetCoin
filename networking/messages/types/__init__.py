@@ -13,22 +13,22 @@ from .tx import TxMessage
 from .mempool import MempoolMessage
 from .ping import PingMessage
 from .pong import PongMessage
-
+ 
 # Grouped by protocol function for documentation
 CORE_MESSAGES = [
-    VersionMessage,  # Handshake
+    VersionMessage,
     VerackMessage,
-    GetAddrMessage,  # Peer discovery
+    GetAddrMessage, 
     AddrMessage,
-    InvMessage,  # Data propagation
+    InvMessage,
     GetDataMessage,
-    GetBlocksMessage,  # Chain sync
+    GetBlocksMessage,
     GetHeadersMessage,
     HeadersMessage,
     BlockMessage,
-    TxMessage,  # Transactions
+    TxMessage, 
     MempoolMessage,
-    PingMessage,  # Connection
+    PingMessage,
     PongMessage
 ]
 
