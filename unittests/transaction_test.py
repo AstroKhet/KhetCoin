@@ -1,7 +1,7 @@
 from unittest import TestCase
 from io import BytesIO
 from utils.helper import *
-from utils.print import print_compare_bytes
+from utils.fmt import print_compare_bytes
 from blockchain.transaction import *
 
 ## Imported from "Programming Bitcoin" by Jimmy Song
@@ -26,7 +26,7 @@ class TxTest(TestCase):
         want = bytes.fromhex(
             "d1c789a9c60383bf715f3f6ad9d14b91fe55f3deb369fe5d9280cb1a01793f81"
         )
-        self.assertEqual(tx.inputs[0].prev_hash, want)
+        self.assertEqual(tx.inputs[0].prev_tx_hash, want)
         self.assertEqual(tx.inputs[0].prev_index, 0)
         want = bytes.fromhex(
             "6b483045022100ed81ff192e75a3fd2304004dcadb746fa5e24c5031ccfcf21320b0277457c98f02207a986d955c6e0cb35d446a89d3f56100f4d7f67801c31967743a9c8e10615bed01210349fc4e631e3624a545de3f89f5d8684c7b8138bd94bdd531d2e213bf016b278a"

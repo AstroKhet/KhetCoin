@@ -1,9 +1,17 @@
 import os
 import re
+from tabnanny import check
+import base58
 from coincurve import PrivateKey, PublicKey
+from numpy import byte
 from pydantic import PrivateAttr
 
-KEY_DATA_ACCESS_FOLDER = ".local/keys/"
+from crypto.hashing import HASH256
+
+KEY_DATA_ACCESS_FOLDER = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    ".local/keys"
+)
 
 def create_private_key() -> bytes:
     private_key_bytes = os.urandom(32)
@@ -51,8 +59,36 @@ def get_private_key(name: str, raw: bool=True) -> bytes | PrivateKey:
 
 
 def get_public_key(name: str, raw: bool=True) -> bytes | PublicKey:
-    priv_key: PrivateKey = get_private_key(name, raw=False)
+    """
+    Returns the 33B compressed SEC format of the public key
+    1B Y-parity + 32B X-coordinate
+    """
+    priv_key: PrivateKey = get_private_key(name, raw=False) # type: ignore
     publ_key = priv_key.public_key
     if raw:
         return publ_key.format(compressed=True)
     return publ_key
+
+
+def wif_encode(addr: bytes | str, version=b"\x00") -> str:
+    if isinstance(addr, str):
+        try:
+            addr = bytes.fromhex(addr)
+        except ValueError:
+            return addr
+        
+    pre = version + addr
+    checksum = HASH256(pre)[:4]
+    code = pre + checksum
+    
+    return base58.b58encode(code).decode()
+
+def wif_decode(wif: str) -> bytes | None:
+    decode = base58.b58decode(wif)
+    version = decode[:1]
+    addr = decode[1:-4]
+    checksum = decode[-4:]
+    if HASH256(version + addr)[:4] != checksum:
+        return None
+    
+    return addr

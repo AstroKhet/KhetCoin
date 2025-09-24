@@ -1,7 +1,5 @@
 from typing import BinaryIO, List
 
-from jwt import encode
-
 from utils.helper import encode_varint, read_varint
 
 

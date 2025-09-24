@@ -1,13 +1,14 @@
 from typing import BinaryIO
-from sqlalchemy import Transaction
-
+from blockchain.transaction import Transaction
 
 class TxMessage:
     command = b"tx"
 
-    def __init__(self, tx: Transaction):
-        self.tx = tx = tx
-        self.payload = tx.serialize()
+    def __init__(self, tx: Transaction | bytes):
+        if isinstance(tx, Transaction):
+            self.tx = self.payload = tx.serialize()
+        else:
+            self.tx = self.payload = tx
 
     def __str__(self):
         return f"[tx]\n{self.tx}"

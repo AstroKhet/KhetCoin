@@ -1,22 +1,22 @@
 from typing import BinaryIO, List
 
-from blockchain.block import GENESIS_BLOCK_HASH
+from ktc_constants import GENESIS_HASH
 from networking.constants import PROTOCOL_VERSION
-from utils.helper import encode_varint, itole, letoi, read_varint
+from utils.helper import encode_varint, int_to_bytes, bytes_to_int, read_varint
 
 
 class GetHeadersMessage:
     command = b"getheaders"
     def __init__(
         self, version: int = PROTOCOL_VERSION, 
-        locator_hashes: List[bytes] = [GENESIS_BLOCK_HASH], 
-        hash_stop: bytes = None
+        locator_hashes: List[bytes] = [GENESIS_HASH], 
+        hash_stop: bytes = bytes(32)  # Zero by default
     ):
         self.version = version
         self.locator_hashes = locator_hashes
         self.hash_stop = hash_stop
         
-        self.payload = itole(self.version, 4) + encode_varint(len(locator_hashes))
+        self.payload = int_to_bytes(self.version, 4) + encode_varint(len(locator_hashes))
         for h in locator_hashes:
             self.payload += h
         self.payload += self.hash_stop
@@ -32,7 +32,7 @@ class GetHeadersMessage:
 
     @classmethod
     def parse(cls, stream: BinaryIO) -> "GetHeadersMessage":
-        version = letoi(stream.read(4))
+        version = bytes_to_int(stream.read(4))
         count = read_varint(stream)
         locator_hashes = []
         for _ in range(count):

@@ -1,6 +1,7 @@
+from db.constants import *
+from db.utils import print_dat, print_lmdb
 from utils.helper import *
-from utils.print import *
-from utils.database import *
+from utils.fmt import *
 
 from blockchain.block import *
 from blockchain.merkle_tree import *
@@ -10,20 +11,38 @@ from blockchain.script import *
 from crypto.key import *
 from crypto.mining import *
 
-from coincurve import verify_signature
+from ktc_constants import MIN_BITS
 
-genesis_blk_height = 0  # duh
+# Create Genesis Block and insert into database
+# Genesis Block will use P2PKH, but P2SH will be supported as well
+
+# ScriptSig (Coinbase; can be anything)
+# Suggested format: <BlockHeight> <custom data> <additional nonce>
+script_sig = Script([
+    int_to_bytes(0, 8), 
+    b"Khet turns 6 on 01/Feb/2025"
+])
+
+# ScriptPubkey
+# OP_DUP OP_HASH160 <PubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
+script_pubkey = Script([
+    0x76,
+    0xA9,
+    HASH160(get_public_key("Khet", raw=True)), # type: ignore
+    0x88,
+    0xAC
+])
 
 coinbase_tx_input = TransactionInput(
-    prev_hash=bytes.fromhex("ff" * 32),
+    prev_hash=bytes(32),
     prev_index=0xffffffff,
-    script_sig=Script([itole(genesis_blk_height, 8), b"Khet turns 6 on 01/Feb/2025"]),
+    script_sig=script_sig,
     sequence=0xffffffff,
 )
 
 coinbase_tx_output = TransactionOutput(
-    value=5_000_000_000,  # 50 KTC
-    script_pubkey=Script([get_public_key("Khet", raw=True), 0xAC]),  ## OP CHECK SIG
+    value=50 * KTC,  # 50 KTC
+    script_pubkey=script_pubkey,
 )
 
 coinbase_tx = Transaction(
@@ -33,50 +52,103 @@ coinbase_tx = Transaction(
     locktime=0
 )
 
-genesis = Block(
+unmined_genesis_block = Block(
     version=1,
     prev_block=bytes.fromhex("00" * 32),
     merkle_root=MerkleTree([coinbase_tx.hash()]).get_merkle_root(),
-    timestamp=1738339200,  # 01/Feb/2025 00:00
-    bits=LOWEST_BITS,  # LOWEST_BITS,
-    nonce=30864130,
+    timestamp=int(time.time()),
+    bits=MIN_BITS,  # LOWEST_BITS,
+    nonce=0,
     tx_hashes=[coinbase_tx.hash()],
 )
-
-def mine(blk):
-    blk = mine_block_with_nonce(blk)
-    print(f"Nonce = {blk.nonce}")
-
-    print("Genesis Block: ")
-    print_bytes(blk.serialize())
-    print("Block Hash: ")
-    print_bytes(blk.hash())
-    print("Nonce:", blk.nonce)
-
 
 # FOR MINING PURPOSES
 if __name__ == "__main__":
     print("Genesis Block: ")
-    print_bytes(genesis.hash())
+
     print("\n" + "-" * 75 + "\n")
-    # mine(genesis)
+
+    genesis_block = mine_block_with_nonce(unmined_genesis_block)
+    print("Genesis Block Hash")
+    print(genesis_block.hash().hex())
+    
+    print("Genesis header")
+    print(genesis_block.header().hex())
 
     print("GENESIS BLOCK FULL DAT")
     print_bytes(
-        genesis.serialize() + 
+        genesis_block.header() + 
         encode_varint(1) + 
         coinbase_tx.serialize()
     )
 
-    ERASE_ALL_DATA()
-    save_block(genesis.serialize(), [coinbase_tx.serialize()], 0)
+    print("Saving Genesis Block...")
+    dat_file_no = 0
+    dat_file = os.path.join(BLOCKCHAIN_DIR, f"blk{dat_file_no:08}.dat")
+    if not os.path.exists(dat_file):
+        open(dat_file, "wb").close()
 
-    print("-" * 75)
-    blk0 = os.path.join(DAT_FILE_DIR, "blk00000000.dat")
+    try:
+        with (
+            open(dat_file, "ab") as dat,
+            LMDB_ENV.begin(db=BLOCKS_DB, write=True) as block_db,
+            LMDB_ENV.begin(db=TX_DB, write=True) as tx_db,
+            LMDB_ENV.begin(db=HEIGHT_DB, write=True) as height_db,
+            LMDB_ENV.begin(db=ADDR_DB, write=True) as addr_db,
+            LMDB_ENV.begin(db=UTXO_DB, write=True) as utxo_db
+        ):
+            print(f"Saving dat {dat_file}")
+            header = genesis_block.header()
+            full_block = header + encode_varint(1) + coinbase_tx.serialize()
 
-    with open(blk0, "rb") as f:
-        print("GENESIS BLOCK DATA (SAVED)")
-        print_bytes(f.read())
+            dat.write(BLOCK_MAGIC)
+            dat.write(int_to_bytes(len(full_block)))
+            dat.write(full_block)
+            dat.flush()
 
-    view_blk_lmdb()
-    view_txn_lmdb()
+            print("saving block")
+            block_value = (
+                int_to_bytes(dat_file_no)
+                + int_to_bytes(0)  # offset
+                + int_to_bytes(len(full_block))  # BlockSize
+                + header[68:72]  # Timestamp
+                + int_to_bytes(1)  # No. Txns
+                + int_to_bytes(coinbase_tx_output.value, 8)  # Total sent
+                + int_to_bytes(0, 8)  # Fee
+                + encode_varint(0) # Height
+            )
+
+            block_db.put(genesis_block.hash(), block_value)
+
+            print("Saving TX")
+            tx_hash = HASH256(coinbase_tx.serialize())
+            tx_value = (
+                int_to_bytes(0)
+                + int_to_bytes(88 + len(encode_varint(1)))
+                + int_to_bytes(len(coinbase_tx.serialize()))
+                + int_to_bytes(0)
+                + encode_varint(0)
+            )
+
+            tx_db.put(tx_hash, tx_value)
+
+            print("Saving Height")
+            height_db.put(encode_varint(0), genesis_block.hash())
+
+            print("Saving UTXO ADDR")
+            key = HASH160(get_public_key("Khet", raw=True))  # Khet's P2PKH 20B Address
+            value = tx_hash + int_to_bytes(0) # Outpoint
+            addr_db.put(key, value)
+            
+            print("Saving UTXO")
+            key = coinbase_tx.hash() + int_to_bytes(0)
+            value = coinbase_tx.outputs[0].serialize()
+            utxo_db.put(key, value)
+
+            print("Genesis block saved")
+ 
+    except Exception as e:
+        print(f"Error {e}")
+    print_lmdb()
+    print_dat(0, 0)
+    # save_block(genesis.serialize(), [coinbase_tx.serialize()])

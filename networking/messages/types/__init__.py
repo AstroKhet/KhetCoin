@@ -10,12 +10,13 @@ from .getheaders import GetHeadersMessage
 from .headers import HeadersMessage
 from .block import BlockMessage
 from .tx import TxMessage
+from .notfound import NotFoundMessage
 from .mempool import MempoolMessage
 from .ping import PingMessage
 from .pong import PongMessage
  
 # Grouped by protocol function for documentation
-CORE_MESSAGES = [
+CORE_MESSAGES = (
     VersionMessage,
     VerackMessage,
     GetAddrMessage, 
@@ -27,10 +28,11 @@ CORE_MESSAGES = [
     HeadersMessage,
     BlockMessage,
     TxMessage, 
+    NotFoundMessage,
     MempoolMessage,
     PingMessage,
     PongMessage
-]
+)
 
 __all__ = [
     "VersionMessage",
@@ -44,6 +46,7 @@ __all__ = [
     "HeadersMessage",
     "BlockMessage",
     "TxMessage",
+    "NotFoundMessage",
     "MempoolMessage",
     "PingMessage",
     "PongMessage",

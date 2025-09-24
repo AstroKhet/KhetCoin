@@ -1,141 +1,317 @@
 import asyncio
-import json
-from pathlib import Path
+import logging
+import random
+import time
+from typing import Optional, Set, Tuple
 
+from crypto.hashing import HASH160
+from crypto.key import get_public_key
 from utils.helper import str_ip
+from ktc_constants import MAX_PEERS
 
-from networking.constants import HANDSHAKE_TIMEOUT
+from networking.constants import CONNECTION_TIMEOUT, HANDSHAKE_TIMEOUT
+from networking.messages.envelope import MessageEnvelope
 from networking.peer import Peer
 from networking.processor import MessageProcessor
 
-# Constants
-DEFAULT_PEERS_FILE = Path(".local/peers.json")  # Format: {"peers": [["ip", port], ...]}
+from mining.mempool import Mempool
+from db.peers import load_peers
 
-MAX_PEERS = 8  # Bitcoin Core default
+
+log = logging.getLogger(__name__)
 
 
 class Node:
-    def __init__(self, name: str, host="0.0.0.0", port: int = 9333):
+    def __init__(self, name: str, host: str = "0.0.0.0", port: int = 9333):
         self.name = name
         self.host = host
         self.port = port
-        self.peers = set()
-        self.server: asyncio.Server
+        self.peers: Set[Peer] = set()
+        self.pk_hash: bytes = HASH160(get_public_key(name, raw=True))
 
+        # Self (server)
+        self.server: asyncio.Server | None = None
+        self.server_start_time: int = 0
+        self.mempool = Mempool()
+
+        # Clients (peers)
+        self.peer_id: int = 0
+        self.bytes_recv: int = 0
+        self.bytes_sent: int = 0
+
+        # Async variables
         self.processor = MessageProcessor(self)
-        self.message_queue = asyncio.Queue()
+        self.processor_queue: asyncio.Queue[Tuple[Peer, MessageEnvelope]] = asyncio.Queue()  # For db write serialization
+
+        self._shutdown_requested = asyncio.Event()
+        self._tasks: Set[asyncio.Task] = set()
+
+        log.info(f"Node '{self.name}' initialized on {self.host}:{self.port}")
 
     async def start_server(self):
-        self.server = await asyncio.start_server(self.handle_peer, self.host, self.port)
-        addr = self.server.sockets[0].getsockname()
-        print(f"[{self.name}] Listening on {addr}")
-        async with self.server:
-            await self.server.serve_forever()
-
-    async def handle_peer(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        addr = writer.get_extra_info("peername")
-        print(f"[{self.name}] Incoming connection from {addr}")
-        peer = Peer(self, reader, writer)
-
         try:
-            established = await asyncio.wait_for(peer.respond_handshake(), timeout=HANDSHAKE_TIMEOUT)
-        except asyncio.TimeoutError:
-            print(f"[{self.name}] Handshake timed out from incoming {str_ip(addr)}")
-            await peer.close()
-            return
-
-        if established:
-            self.peers.add(peer)
-            asyncio.create_task(peer.listen())
-            print(f"Incoming handshake complete from {str_ip(addr)}")
-        else:
-            print(f"Handshake failed from incoming {str_ip(addr)}")
-            await peer.close()
-
-    async def connect_to_peer(self, addr: tuple, name: str = ""):
-        try:
-            reader, writer = await asyncio.open_connection(
-                addr[0], addr[1], local_addr=(self.host, self.port)
+            self.server = await asyncio.start_server(
+                self._handle_incoming_connection, self.host, self.port
             )
-        except (ConnectionRefusedError, OSError) as e:
-            print(
-                f"Could not connect to {str_ip}: {e}"
-            )
-            return
+            addr = self.server.sockets[0].getsockname()
+            self.server_start_time = int(time.time())
 
-        print(f"Connected to peer: {str_ip(addr, name)}")
-        peer = Peer(self, reader, writer, name)
+            log.info(f"[{self.name}] Server listening on {addr}")
+        except Exception as e:
+            log.exception(f"[{self.name}] Error starting server: {e}")
+            self.server = None
+            self._shutdown_requested.set()
 
-        try:
-            established = await asyncio.wait_for(
-                peer.initiate_handshake(), timeout=HANDSHAKE_TIMEOUT
-            )
-        except asyncio.TimeoutError:
-            print(
-                f"Handshake timed out with {str_ip(addr, name)}"
-            )
-            await peer.close()
-            return
+    async def close_server(self):
+        awaitables = []
 
-        if established:
-            self.peers.add(peer)
-            asyncio.create_task(peer.listen())
-            print(f"Handshake complete with {str_ip(addr)}")
-        else:
-            print(f"[{self.name}] Handshake failed with {str_ip(addr)}")
-            await peer.close()
+        if self.server:
+            log.debug("Closing server...")
+            self.server.close()
+            self.server = None
 
-    def remove_peer(self, peer):
-        self.peers.discard(peer)
+        tasks_to_cancel = list(self._tasks)
+        self._tasks.clear()
 
-    def load_peers_from_json(self, file_path: Path = DEFAULT_PEERS_FILE):
-        try:
-            with open(file_path, "r") as f:
-                return json.load(f)
-        except FileNotFoundError:
-            print(f"Peers file not found: {file_path}. Starting with no peers.")
-            return {}
+        peers_to_close = list(self.peers)
+        self.peers.clear()
 
-        except json.JSONDecodeError:
-            print(f"Error decoding JSON from {file_path}. Starting with no peers.")
-            return {}
+        for peer in peers_to_close:
+            awaitables.append(peer.close())
 
-    async def broadcast(self, message):
-        for peer in list(self.peers):  # Copy to avoid modification during iteration
-            await peer.send(message)
+        for task in tasks_to_cancel:
+            if not task.done():
+                task.cancel()
+            awaitables.append(task)
 
-    async def message_dispatcher(self):
-        while True:
-            peer, message_envelope = await self.message_queue.get()
-            try:
-                # Await the async processing of the message
-                await self.processor.process_message(peer, message_envelope)
-            except Exception as e:
-                print(f"Error processing message: {e}")
+        if awaitables:
+            await asyncio.gather(*awaitables, return_exceptions=True)
+
+        self.server_start_time = 0
 
     async def run(self):
+        log.info(f"Node starting...")
+        self._shutdown_requested.clear()
+
         server_task = asyncio.create_task(self.start_server())
-        processor_task = asyncio.create_task(self.message_dispatcher())
+        self.add_task(server_task)
 
-        # EXAMPLE CONNECTION TO BOB
+        if self._shutdown_requested.is_set():
+            log.error(f"Exiting run() because server failed to start.")
+            await self.close_server()
+            return
 
-        for peer_name, peer_details in self.load_peers_from_json().items():
-            peer_ip = peer_details["ip_address"]
-            peer_port = peer_details["port"]
+        processor_task = asyncio.create_task(self._message_processor_loop())
+        self.add_task(processor_task)
 
-            await self.connect_to_peer((peer_ip, peer_port), peer_name)
+        connect_initial_task = asyncio.create_task(self._connect_initial_peers())
+        self.add_task(connect_initial_task)
 
-        
-        ## MANUAL INPUT LOOP FOR TESTING PURPOSES ONLY
+        peer_rotation_task = asyncio.create_task(self._peer_rotation())
+        self.add_task(peer_rotation_task)
+
+        log.info(f"[{self.name}] Node running. Waiting for shutdown signal...")
+        await self._shutdown_requested.wait()
+
+        log.info(f"[{self.name}] Shutdown requested. Cleaning up...")
+        await self._shutdown_tasks()
+        log.info(f"[{self.name}] Node finished.")
+
+    async def connect_to_peer(self, addr: tuple, name: str = ""):
+        peer_str_ip = str_ip(addr, name)
+        if len(self.peers) >= MAX_PEERS:
+            return
+
+        log.info(f"[{self.name}] Attempting TCP connection to {peer_str_ip}...")
+        reader, writer = None, None
         try:
-            while True:
-                msg = await asyncio.to_thread(
-                    input, "Enter message (or 'exit' to stop): "
-                )
-                if msg.lower() == "exit":
-                    break
-                await self.broadcast(msg)
-        finally:
-            server_task.cancel()
-            processor_task.cancel()
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(addr[0], addr[1]), timeout=CONNECTION_TIMEOUT
+            )
+            log.info(f"[{self.name}] TCP connection established with {peer_str_ip}. Starting handshake...")
+        except Exception as e:
+            log.exception(f"[{self.name}] Unexpected error connecting TCP to {peer_str_ip}: {e}")
+            return
 
+        peer = Peer(self, reader, writer, name, session_id=self.peer_id, direction="outbound")
+        self.peer_id += 1
+        listen_task = asyncio.create_task(peer.listen())
+        peer.listen_task = listen_task
+        self.add_task(listen_task)
+
+        try:
+            await peer.send_version()
+            established = await asyncio.wait_for(
+                peer.established, timeout=HANDSHAKE_TIMEOUT
+            )
+            if established:
+                self.peers.add(peer)
+            else:
+                log.warning(f"[{self.name}] Handshake failed with peer {peer.str_ip}.")
+        except Exception as e:
+            log.exception(f"[{self.name}] Error during handshake with peer {peer.str_ip}: {e}")
+            await peer.close()
+
+    async def broadcast(self, 
+        message: MessageEnvelope, 
+        exclude: Optional[Peer] = None,
+        sample: int = MAX_PEERS,
+        outbound: bool = False
+    ):
+        target_peers = list(self.peers)
+
+        if exclude: 
+            target_peers = [peer for peer in target_peers if peer != exclude]
+
+        if outbound:
+            target_peers = [peer for peer in target_peers if peer.direction == "outbound"]
+
+        target_peers = random.sample(
+            target_peers,
+            max(0, min(sample, len(target_peers)))
+        )
+
+        for peer in target_peers:
+            self.add_task(
+                asyncio.create_task(peer.send_message(message))
+            )
+
+    async def _handle_incoming_connection(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ):
+        # Get peer address
+        peer_addr_info = writer.get_extra_info("peername", ("Unknown", 0))
+        peer_str_ip = str_ip(peer_addr_info)
+        log.debug(f"[{self.name}] Handling incoming connection from {peer_str_ip}")
+
+        # Check if its possible to connect with peer
+        if len(self.peers) >= MAX_PEERS:
+            writer.close()
+            await writer.wait_closed()
+            return
+
+        if any(p.addr == peer_addr_info for p in self.peers):
+            writer.close()
+            await writer.wait_closed()
+            return
+
+        # Create peer object
+        peer = Peer(self, reader, writer, session_id=self.peer_id, direction="inbound")
+        self.peer_id += 1
+
+        # Start listening to peer
+        log.info(
+            f"Connected to peer no. {peer.session_id} from {peer.str_ip}. Starting handshake..."
+        )
+
+        listen_task = asyncio.create_task(peer.listen(), name=f"Listen_{peer.str_ip}")
+        peer.listen_task = listen_task
+        self.add_task(listen_task)
+
+        # Send VersionMessage
+        await peer.send_version()
+
+        try:
+            log.debug(
+                f"[{self.name}] Waiting for handshake established future from {peer.str_ip}..."
+            )
+            established = await asyncio.wait_for(
+                peer.established, timeout=HANDSHAKE_TIMEOUT
+            )
+            if established:
+                log.info(
+                    f"[{self.name}] Handshake successful with incoming peer {peer.str_ip}. Adding to peers."
+                )
+                self.peers.add(peer)
+            else:
+                log.warning(
+                    f"[{self.name}] Handshake failed or rejected by incoming peer {peer.str_ip} (established=False)."
+                )
+        except Exception as e:
+            log.exception(
+                f"[{self.name}] Error during handshake with incoming peer {peer.str_ip}: {e}"
+            )
+            if not peer.writer.is_closing():
+                await peer.close()
+
+    async def _message_processor_loop(self):
+        log.info("Message processor loop started.")
+        while not self._shutdown_requested.is_set():
+            try:
+                peer, message_envelope = await self.processor_queue.get()
+                # Concurrent message processing
+                # processor_task = asyncio.create_task(
+                #     self.processor.process_message(peer, message_envelope)
+                # )
+                # self.add_task(processor_task)
+
+                # Single message processing
+                await self.processor.process_message(peer, message_envelope)
+                self.processor_queue.task_done()
+
+            except Exception as e:
+                log.exception(f"Error in message processor loop: {e}")
+                await asyncio.sleep(1)
+
+        log.info("Message processor loop finished.")
+
+    async def _connect_initial_peers(self):
+        log.info("Connecting to initial peers...")
+        peers_to_connect = await load_peers()
+        # print(peers_to_connect)
+        if not peers_to_connect:
+            return 
+
+        for ip, port, name, *_ in peers_to_connect:
+            print(ip, port, name)
+            self.add_task(
+                asyncio.create_task(
+                    self.connect_to_peer((ip, port), name)
+                )
+            )
+
+    async def _peer_rotation(self):
+        log.info("Rotating task started")
+        # periodically removes inactive peers and rotates active ones
+        return
+
+    def add_task(self, task: asyncio.Task):
+        def task_done(task: asyncio.Task):
+            try:
+                task.result()  # This re-raises if the task had an exception
+            except Exception as e:
+                log.error(f"Task failed: {e}")
+            finally:
+                self._tasks.discard(task)
+
+        self._tasks.add(task)
+        task.add_done_callback(task_done)
+
+    async def shutdown(self):
+        log.info(f"[{self.name}] External shutdown triggered.")
+        self._shutdown_requested.set()
+
+    async def _shutdown_tasks(self):
+        await self.close_server()
+
+    def remove_peer(self, peer: Peer):
+        self.peers.discard(peer)
+
+    def get_peer_by_id(self, peer_id: int) -> Peer | None:
+        for peer in self.peers:
+            if peer.session_id == peer_id:
+                return peer
+        else:
+            return None
+
+    @property
+    def uptime(self) -> int:
+        if self.server_start_time:
+            return int(time.time()) - self.server_start_time
+        else:
+            return 0
+
+    @property
+    def public_ip_addr(self) -> str:
+        from requests import get
+        return get("https://api.ipify.org").content.decode("utf8")

@@ -47,7 +47,15 @@ def op_checksig(stack: List[bytes | int], msg_hash: bytes) -> bool:
         return False
 
     pubkey_bytes = stack.pop()
-    sig = stack.pop()[:-1]  # Remove the sighash byte
+    if not isinstance(pubkey_bytes, bytes):
+        return False
+
+    sig_full = stack.pop()
+    if not isinstance(sig_full, bytes):
+        return False
+    
+    sig, sighash_type = sig_full[:-1], sig_full[-1]
+    # sighash_type will be used in the future... maybe...
 
     valid_sig = verify_signature(sig, msg_hash, pubkey_bytes, hasher=None)
     stack.append(int(valid_sig))
@@ -60,6 +68,10 @@ def op_checkmultisig(stack: List[bytes | int]) -> bool:
     if len(stack) < 3:
         return False
     n = stack.pop()  # Number of required signatures
+    
+    if not isinstance(n, int):
+        return False
+        
     if len(stack) < n + 1:
         return False
     for _ in range(n):  # Simulated signature verification
@@ -111,3 +123,15 @@ OP_CODE_NAMES = {
     0x6A: "OP_RETURN",
     0x61: "OP_NOP",
 }
+
+# Constants for better readability
+OP_DUP = 0x76
+OP_HASH160 = 0xA9
+OP_HASH256 = 0xAA
+OP_EQUAL = 0x87
+OP_EQUALVERIFY = 0x88
+OP_CHECKSIG = 0xAC
+OP_CHECKMULTISIG = 0xAE
+OP_VERIFY = 0x69
+OP_RETURN = 0x6A
+OP_NOP = 0x61

@@ -3,7 +3,7 @@ from typing import BinaryIO
 
 from crypto.hashing import HASH256
 from networking.constants import PROTOCOL_VERSION, NETWORK_PORT, SERVICES
-from utils.helper import encode_ip_address, format_ip_address, itole, letoi
+from utils.helper import encode_ip, format_ip, int_to_bytes, bytes_to_int
 
  
 class VersionMessage:
@@ -22,14 +22,14 @@ class VersionMessage:
         self.timestamp = timestamp
 
         self.recver_services = recver_services
-        self.recver_ip = encode_ip_address(recver_ip)
+        self.recver_ip = encode_ip(recver_ip)
         self.recver_port = recver_port
-        self.recver_addr = itole(recver_services, 8) + self.recver_ip + itole(recver_port, 2)
+        self.recver_addr = int_to_bytes(recver_services, 8) + self.recver_ip + int_to_bytes(recver_port, 2)
 
         self.sender_services = sender_services
-        self.sender_ip = encode_ip_address(sender_ip)
+        self.sender_ip = encode_ip(sender_ip)
         self.sender_port = sender_port
-        self.sender_addr = itole(sender_services, 8) + self.sender_ip + itole(sender_port, 2)
+        self.sender_addr = int_to_bytes(sender_services, 8) + self.sender_ip + int_to_bytes(sender_port, 2)
 
         self.nonce = nonce
         self.user_agent = user_agent
@@ -37,16 +37,13 @@ class VersionMessage:
         self.relay = relay  # ?
 
         self.payload = (
-            itole(self.version, 4) + itole(self.services, 8) + itole(self.timestamp, 8)
+            int_to_bytes(self.version, 4) + int_to_bytes(self.services, 8) + int_to_bytes(self.timestamp, 8)
             + self.recver_addr
             + self.sender_addr
-            + itole(self.nonce, 8)
-            + itole(len(self.user_agent), 1) + self.user_agent
-            + itole(self.start_height, 4) + itole(self.relay, 1)
+            + int_to_bytes(self.nonce, 8)
+            + int_to_bytes(len(self.user_agent), 1) + self.user_agent
+            + int_to_bytes(self.start_height, 4) + int_to_bytes(self.relay, 1)
         )
-
-        self.length = len(self.payload)
-        self.checksum = HASH256(self.payload)[:4]
 
     def __str__(self):
         timestamp = time.strftime("%d %m %y %H:%M", time.localtime(self.timestamp))
@@ -58,42 +55,40 @@ class VersionMessage:
             "",
             "  Receiver:",
             f"    Services: {hex(self.recver_services)}",
-            f"    IP:       {format_ip_address(self.recver_ip)}",
+            f"    IP:       {format_ip(self.recver_ip)}",
             f"    Port:     {self.recver_port}",
             "",
             "  Sender:",
             f"    Services: {hex(self.sender_services)}",
-            f"    IP:       {format_ip_address(self.sender_ip)}",
+            f"    IP:       {format_ip(self.sender_ip)}",
             f"    Port:     {self.sender_port}",
             "",
             f"  Nonce:      {self.nonce}",
             f"  User Agent: {self.user_agent.decode(errors='replace')}",
             f"  Start Height: {self.start_height}",
-            f"  Relay:      {self.relay}",
-            f"  Length:     {self.length} bytes",
-            f"  Checksum:   {self.checksum.hex()}",
+            f"  Relay:      {self.relay}"
         ]
         return "\n".join(lines)
 
     @classmethod
     def parse(cls, stream: BinaryIO):
-        version = letoi(stream.read(4))
-        services = letoi(stream.read(8))
-        timestamp = letoi(stream.read(8))
+        version = bytes_to_int(stream.read(4))
+        services = bytes_to_int(stream.read(8))
+        timestamp = bytes_to_int(stream.read(8))
 
-        recver_services = letoi(stream.read(8))
+        recver_services = bytes_to_int(stream.read(8))
         recver_ip = stream.read(16) 
-        recver_port = letoi(stream.read(2))
+        recver_port = bytes_to_int(stream.read(2))
 
-        sender_services = letoi(stream.read(8))
+        sender_services = bytes_to_int(stream.read(8))
         sender_ip = stream.read(16)
-        sender_port = letoi(stream.read(2))
+        sender_port = bytes_to_int(stream.read(2))
         
-        nonce = letoi(stream.read(8))
-        user_agent_length = letoi(stream.read(1))
+        nonce = bytes_to_int(stream.read(8))
+        user_agent_length = bytes_to_int(stream.read(1))
         user_agent = stream.read(user_agent_length)
-        start_height = letoi(stream.read(4))
-        relay = bool(letoi(stream.read(1)))
+        start_height = bytes_to_int(stream.read(4))
+        relay = bool(bytes_to_int(stream.read(1)))
 
         return cls(
             version, services, timestamp,

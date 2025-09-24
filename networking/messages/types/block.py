@@ -5,9 +5,11 @@ from blockchain.block import Block
 class BlockMessage:
     command = b"block"
 
-    def __init__(self, block: Block):
-        self.block = block
-        self.payload = block.serialize()
+    def __init__(self, block: Block | bytes):
+        if isinstance(block, Block):
+            self.block = self.payload = block.header()
+        else:
+            self.block = self.payload = block 
 
     def __str__(self):
         return f"[block]\n{self.block}"

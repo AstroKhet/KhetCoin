@@ -1,16 +1,16 @@
-
-
 import asyncio
 from io import BytesIO
+import logging
 from typing import BinaryIO
 from crypto.hashing import HASH256
 from networking.constants import NETWORK_MAGIC
 from networking.messages.types import COMMAND_MAP
-from utils.helper import itole, letoi
+from utils.helper import int_to_bytes, bytes_to_int
 
+log = logging.getLogger(__name__)
 
 class MessageEnvelope:
-    def __init__(self, command: bytes, payload: bytes):
+    def __init__(self, command: bytes, payload: bytes = b""):
         self.command = command.strip(b"\x00")
         self.payload = payload
 
@@ -18,10 +18,13 @@ class MessageEnvelope:
         if not message_class:
             raise ValueError(f"Unkown command: {self.command.decode('ascii')}")
 
-        self.message = message_class.parse(self.payload)
+        self.message = message_class.parse(self.payload_stream)
 
     def __str__(self):
-        return f"[{self.command.decode('ascii')}]\n{self.message}"
+        result = f"{self.message}\n"
+        result += f"Length: {len(self.payload)}\n"
+        result += f"Checksum: {HASH256(self.payload)[:4].hex()}\n"
+        return result
 
     @classmethod
     def parse(cls, stream: BinaryIO) -> "MessageEnvelope":
@@ -30,7 +33,7 @@ class MessageEnvelope:
             raise RuntimeError("Invalid network magic")
 
         command = stream.read(12).strip(b"\x00")
-        len_payload = letoi(stream.read(4))
+        len_payload = bytes_to_int(stream.read(4))
         checksum = stream.read(4)
         payload = stream.read(len_payload)
 
@@ -42,12 +45,15 @@ class MessageEnvelope:
     @classmethod
     async def parse_async(cls, reader: asyncio.StreamReader) -> "MessageEnvelope":
         magic = await reader.readexactly(4)
+        if not magic:
+            #TODO: Handle ConnectionResetError
+            raise EOFError("Peer disconnected")
         if magic != NETWORK_MAGIC:
             raise RuntimeError("Invalid network magic")
 
         command = await reader.readexactly(12)
         command = command.strip(b"\x00")
-        len_payload = letoi(await reader.readexactly(4))
+        len_payload = bytes_to_int(await reader.readexactly(4))
         checksum = await reader.readexactly(4)
         payload = await reader.readexactly(len_payload)
 
@@ -59,7 +65,7 @@ class MessageEnvelope:
     def serialize(self) -> bytes:
         result: bytes = NETWORK_MAGIC
         result += self.command.ljust(12, b"\x00")
-        result += itole(len(self.payload), 4)
+        result += int_to_bytes(len(self.payload), 4)
         result += HASH256(self.payload)[:4]  # checksum
         result += self.payload
         return result
@@ -67,3 +73,8 @@ class MessageEnvelope:
     @property
     def payload_stream(self):
         return BytesIO(self.payload)
+    
+    
+    @property 
+    def payload_size(self) -> int:
+        return len(self.serialize())

@@ -1,0 +1,11 @@
+{
+    "node" : {
+        "name": "Khet",
+        "minRelayTxFee": 100,
+        "transaction_history": []
+    },
+
+    "gui": {
+        "theme": "light"
+    }
+}

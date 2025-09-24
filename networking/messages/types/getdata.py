@@ -1,7 +1,7 @@
 from typing import BinaryIO, List
 
 from crypto.hashing import HASH256
-from utils.helper import itole, letoi
+from utils.helper import encode_varint, int_to_bytes, bytes_to_int
 
 
 class GetDataMessage:
@@ -10,9 +10,9 @@ class GetDataMessage:
     def __init__(self, inventory: List[tuple]):
         self.inventory = inventory
 
-        self.payload = itole(len(inventory), 1)
+        self.payload = encode_varint(len(self.inventory))
         for inv_type, inv_hash in inventory:
-            self.payload += itole(inv_type, 4) + inv_hash
+            self.payload += int_to_bytes(inv_type, 4) + inv_hash
 
         self.length = len(self.payload)
         self.checksum = HASH256(self.payload)[:4]
@@ -27,10 +27,10 @@ class GetDataMessage:
 
     @classmethod
     def parse(cls, stream: BinaryIO):
-        count = letoi(stream.read(1))
+        count = bytes_to_int(stream.read(1))
         inventory = []
         for _ in range(count):
-            inv_type = letoi(stream.read(4))
+            inv_type = bytes_to_int(stream.read(4))
             inv_hash = stream.read(32)
             inventory.append((inv_type, inv_hash))
         return cls(inventory)
