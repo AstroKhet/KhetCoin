@@ -10,4 +10,4 @@ __pycache__/
 
 # Ignore all .mdb files
 *.mdb
-*db
+*.db
