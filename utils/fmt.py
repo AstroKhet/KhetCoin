@@ -1,4 +1,5 @@
 # Formatting / pretty print functions
+from datetime import datetime
 import math
 
 
@@ -80,6 +81,8 @@ def format_age(seconds: int | float) -> str:
 
     return " ".join(f"{value}{name}" for name, value in units[start:])
 
+def format_epoch(epoch: int | float) -> str:
+    return datetime.fromtimestamp(epoch).strftime("%d %b %Y, %H:%M:%S")
 
 def format_number(num) -> str:
     if abs(num) >= 1_000_000_000_000_000:

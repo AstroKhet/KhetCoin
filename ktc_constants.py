@@ -3,7 +3,7 @@ GENESIS_HEADER = bytes.fromhex(
     ""
 )
 GENESIS_HASH = bytes.fromhex(
-    "000000a56fc3ed0024b9516ca4f5433bec6c56137ab3dcccabaeb3a4bd60b262"
+    "0000074d9ce1bc6fa2c396897578693ac89d2de2b5f3c217ea9dd2fbd12b6961"
 )
 
 # 1 KTC = 10,000,000 khets (analogous to 1 satoshi)
@@ -22,8 +22,8 @@ COINBASE_MATURITY = 10
 MAX_BLOCK_SIZE = 1 << 20  # 1 MB
 
 # Mining difficulty and readjustment
-MIN_DIFFICULTY = 0xFFFF * pow(256, 0x1E - 3)  # Roughly 65537 hashes per block 
-MIN_BITS = bytes.fromhex("00ffff1e")
+MIN_DIFFICULTY = 0xFFFF * pow(256, 0x1F - 3)  # 
+MIN_BITS = bytes.fromhex("00ffff1F")
 
 # Peers (shift over to db.constants, networking.constants)
 PEERS_SQL = ".local/peers.db"

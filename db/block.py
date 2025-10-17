@@ -21,6 +21,9 @@ class BlockMetadata:
     total_sent: int  
     height: int  
 
+# For fast retrieval of metadata within each session
+_metadata_cache: dict[bytes, BlockMetadata | None] = dict()
+
 
 def get_blk_dat_no():
     # retrieves the current (highest) blk*.dat file from BLOCKS_DIR
@@ -96,6 +99,9 @@ def get_block_header(block_hash: bytes) -> bytes | None:
 
 
 def get_block_metadata(block_hash: bytes) -> BlockMetadata | None:
+    if block_hash in _metadata_cache:
+        return _metadata_cache.get(block_hash)
+    
     with LMDB_ENV.begin(db=BLOCKS_DB) as db:
         value = db.get(block_hash)
         if not value:

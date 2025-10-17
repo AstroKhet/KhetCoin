@@ -28,7 +28,7 @@ script_sig = Script([
 script_pubkey = Script([
     0x76,
     0xA9,
-    HASH160(get_public_key("Khet", raw=True)), # type: ignore
+    HASH160(get_public_key("EFD", raw=True)), # type: ignore
     0x88,
     0xAC
 ])
@@ -89,15 +89,7 @@ if __name__ == "__main__":
         open(dat_file, "wb").close()
 
     try:
-        with (
-            open(dat_file, "ab") as dat,
-            LMDB_ENV.begin(db=BLOCKS_DB, write=True) as block_db,
-            LMDB_ENV.begin(db=TX_DB, write=True) as tx_db,
-            LMDB_ENV.begin(db=HEIGHT_DB, write=True) as height_db,
-            LMDB_ENV.begin(db=ADDR_DB, write=True) as addr_db,
-            LMDB_ENV.begin(db=UTXO_DB, write=True) as utxo_db
-        ):
-            print(f"Saving dat {dat_file}")
+        with open(dat_file, "ab") as dat:
             header = genesis_block.header()
             full_block = header + encode_varint(1) + coinbase_tx.serialize()
 
@@ -105,8 +97,8 @@ if __name__ == "__main__":
             dat.write(int_to_bytes(len(full_block)))
             dat.write(full_block)
             dat.flush()
-
-            print("saving block")
+            print(f"Dat {dat_file} saved")
+        with LMDB_ENV.begin(write=True) as db:
             block_value = (
                 int_to_bytes(dat_file_no)
                 + int_to_bytes(0)  # offset
@@ -118,9 +110,9 @@ if __name__ == "__main__":
                 + encode_varint(0) # Height
             )
 
-            block_db.put(genesis_block.hash(), block_value)
+            db.put(genesis_block.hash(), block_value, db=BLOCKS_DB)
+            print("Block DB Saved")
 
-            print("Saving TX")
             tx_hash = HASH256(coinbase_tx.serialize())
             tx_value = (
                 int_to_bytes(0)
@@ -130,22 +122,22 @@ if __name__ == "__main__":
                 + encode_varint(0)
             )
 
-            tx_db.put(tx_hash, tx_value)
+            db.put(tx_hash, tx_value, db=TX_DB)
+            print("tx db saved")
 
-            print("Saving Height")
-            height_db.put(encode_varint(0), genesis_block.hash())
+            db.put(encode_varint(0), genesis_block.hash(), db=HEIGHT_DB)
+            print("Height DB Saved")
 
-            print("Saving UTXO ADDR")
-            key = HASH160(get_public_key("Khet", raw=True))  # Khet's P2PKH 20B Address
+            key = HASH160(get_public_key("EFD", raw=True))  # Khet's P2PKH 20B Address
             value = tx_hash + int_to_bytes(0) # Outpoint
-            addr_db.put(key, value)
+            db.put(key, value, db=ADDR_DB)
+            print("Addr db saved")
             
-            print("Saving UTXO")
             key = coinbase_tx.hash() + int_to_bytes(0)
             value = coinbase_tx.outputs[0].serialize()
-            utxo_db.put(key, value)
-
-            print("Genesis block saved")
+            db.put(key, value, db=UTXO_DB)
+            print("utxo db saved")
+        print("Genesis block saved")
  
     except Exception as e:
         print(f"Error {e}")

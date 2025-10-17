@@ -208,13 +208,15 @@ class PeersFrame(tk.Frame):
         self.selected_peer_id = None
 
     def _update(self):
-        for item in self.tree_peers_list.get_children():
-            self.tree_peers_list.delete(item)
-
-        peers = list(self.node.peers)  # Convert set to list
+        peers = list(self.node.peers)  # Convert set to list for iteration
         self.label_connected_peers.config(text=f"Connected Peers: {len(peers)}")
 
-        for peer in peers:
+        # Map of current peers keyed by session_id
+        current_peers = {peer.session_id: peer for peer in peers}
+        existing_ids = set(self.tree_peers_list.get_children())
+
+        # 1️⃣ Add or update peers
+        for session_id, peer in current_peers.items():
             values = (
                 peer.session_id,
                 peer.name or "N/A",
@@ -223,11 +225,22 @@ class PeersFrame(tk.Frame):
                 peer.direction.title(),
                 peer.latest_ping_time or "N/A",
             )
-            # Internal treeview ID is the same as peer's session ID (TODO check if this is ideal)
-            self.tree_peers_list.insert("", "end", iid=peer.session_id, values=values)
 
-        if self.frame_details.winfo_ismapped and self.selected_peer:
-            if self.selected_peer.writer.is_closing(): # Peer disconnected while details is open
+            if session_id in existing_ids:
+                # Compare existing row values to avoid unnecessary updates
+                current_values = self.tree_peers_list.item(session_id, "values")
+                if current_values != values:
+                    self.tree_peers_list.item(session_id, values=values)
+            else:
+                # New peer, insert it
+                self.tree_peers_list.insert("", "end", iid=session_id, values=values)
+
+        # 2️⃣ Remove disconnected peers
+        for iid in existing_ids - current_peers.keys():
+            self.tree_peers_list.delete(iid)
+
+        if self.frame_details.winfo_ismapped() and self.selected_peer:
+            if self.selected_peer.session_id not in current_peers: # Peer disconnected 
                 self.selected_peer = self.selected_peer_id = None
                 self._hide_peer_details()
             else:

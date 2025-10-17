@@ -66,7 +66,6 @@ class Script:
 
     def evaluate(self, msg_hash: bytes = b'') -> bool:
         stack = []
-
         for command in self.commands: 
             if isinstance(command, int):  # int which is a command op_code
                 if command in (0xAC, 0xAE):  # OP_CHECKSIG, OP_CHECKMULTISIG
@@ -84,32 +83,24 @@ class Script:
     def is_standard_script_sig(self):
         """
         Checks if Script has the following structure
-        - 72B DER Signature
-        - 20B HASH160 of SEC Compressed Pubkey
+        - 71-73B DER Signature
+        - 33B SEC Compressed Pubkey
         """
-        print("Checking if is standard script sig.......")
         if len(self.commands) != 2:
-            print("Fail: wrong number of commands:", len(self.commands))
             return False
         
         if isinstance(self.commands[0], bytes):
-            if len(self.commands[0]) != 72:
-                print("Fail: first command length is not 72 bytes:", len(self.commands[0]))
+            if not 71 <= len(self.commands[0]) <= 73:
                 return False
         else:
-            print("Fail: first command is not bytes:", type(self.commands[0]))
             return False
 
         if isinstance(self.commands[1], bytes):
             # P2PKH
-            if len(self.commands[1]) != 20:
-                print("Fail: second command length is not 20 bytes:", len(self.commands[1]))
+            if len(self.commands[1]) != 33:
                 return False
         else:
-            print("Fail: second command is not bytes:", type(self.commands[1]))
             return False
-
-        print("Pass: script sig is standard")
         return True
             
     def is_p2pkh(self):
@@ -124,10 +115,10 @@ class Script:
         if len(self.commands) != 5:
             return False
         
-        if self.commands[0] != 0x76: # OP_DUP
+        if self.commands[0] != OP_DUP:
             return False
 
-        if self.commands[1] != 0xA9: # OP_HASH160
+        if self.commands[1] != OP_HASH160:
             return False
         
         if isinstance(self.commands[2], bytes):  # <PubkeyHash>
@@ -136,10 +127,10 @@ class Script:
         else:
             return False
         
-        if self.commands[3] != 0x88:  # OP_EQUALVERIFY
+        if self.commands[3] != OP_EQUALVERIFY: 
             return False
         
-        if self.commands[4] != 0xAC:  # OP_CHECKSIG
+        if self.commands[4] != OP_CHECKSIG:
             return False
         
         return True 
@@ -148,6 +139,8 @@ class Script:
         """
         The receiver address of a transaction is contained within
         the ScriptPubkey of its outputs
+
+        Returns a 20B PubkeyHash
         """
         if not self.is_p2pkh():
             return None
@@ -158,10 +151,12 @@ class Script:
         """
         The sender of a transaction is contained within the ScriptSig
         of its inputs
+
+        Returns a 20B PubkeyHash
         """
         if not self.is_standard_script_sig():
             return None
-        return self.commands[1]  # type: ignore
+        return HASH160(self.commands[1])  # type: ignore
     
     @property
     def sigops(self):

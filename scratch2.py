@@ -18,7 +18,7 @@ script_sig = Script([int_to_bytes(1, 8)])
 
 # ScriptPubkey
 script_pubkey = Script(
-    [0x76, 0xA9, HASH160(get_public_key("Khet", raw=True)), 0x88, 0xAC]  # type: ignore
+    [0x76, 0xA9, HASH160(get_public_key("EFD", raw=True)), 0x88, 0xAC]  # type: ignore
 )
 
 coinbase_tx_input = TransactionInput(

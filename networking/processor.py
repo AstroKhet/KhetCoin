@@ -13,7 +13,6 @@ from db.peers import get_active_peers, save_peer_from_addr
 from networking.constants import BLOCK_TYPE, GETADDR_LIMIT, GETBLOCKS_LIMIT, GETHEADERS_LIMIT, TX_TYPE
 from networking.messages.envelope import MessageEnvelope
 from networking.messages.types import *
-from networking.messages.types import notfound
 from networking.peer import Peer
 
 from utils.helper import encode_ip, int_to_bytes, int_to_bytes
@@ -260,10 +259,13 @@ class MessageProcessor:
         notfound_items = []
         for inv_type, inv_hash in inventory:
             if inv_type == TX_TYPE:
-                if tx := get_txn(inv_hash):  # TODO: notfound msg
-                    tx_msg = TxMessage(tx) # type: ignore
+                if tx := get_txn(inv_hash):  # Stored in local blockchain
+                    tx_msg = TxMessage(tx)
                     await peer.send_message(tx_msg)
-                    continue
+
+                elif tx := self.node.mempool.get_tx_exists(inv_hash):
+                    tx_msg = TxMessage(tx)   # Stored in local Mempool
+                    await peer.send_message(tx_msg)   
 
             elif inv_type == BLOCK_TYPE:
                 if block := get_block(inv_hash):

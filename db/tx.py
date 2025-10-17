@@ -2,7 +2,7 @@ import os
 
 from io import BytesIO
 
-from attr import dataclass
+from dataclasses import dataclass
 from db.block import get_block_hash_at_height, get_block_metadata, get_block_timestamp
 from db.constants import BLOCKCHAIN_DIR, LMDB_ENV, TX_DB
 from utils.helper import bytes_to_int, read_varint

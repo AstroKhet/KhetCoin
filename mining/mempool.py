@@ -1,4 +1,5 @@
 import logging
+import time
 
 from blockchain.transaction import Transaction
 from db.tx import get_txn
@@ -12,25 +13,29 @@ class Mempool:
     Mempool object lifetime lasts as long as the Node's session
     """
     def __init__(self) -> None:
-        # Stores tx_hash : transaction
+        # 1. Validated transactions are stored in mempool
         self._mempool: dict[bytes, Transaction] = dict()
 
-        # Stores UTXOs spent in current mempool
-        self._spent_mempool_utxos: set[tuple[bytes, int]] = set()
-
-        # Orphanage
+        # 2. Orphan transactions & utility variables
         self._orphan_txns:         dict[bytes, Transaction]            = dict()
         self._orphan_missing_utxo: dict[bytes, set[tuple[bytes, int]]] = dict()
         self._orphan_registry:     dict[tuple[bytes, int], bytes]      = dict()
 
+        # 3. Time where transaction was added to mempool / orphan pool
+        self._time_log: dict[bytes, int] = dict()
+
+        # 3. Stores UTXOs spent in current mempool
+        self._spent_mempool_utxos: set[tuple[bytes, int]] = set()
+
     def add_tx(self, tx: Transaction) -> bool:
         if not self.check_mempool_eligibility(tx):
             return False
-
-        self._mempool[tx.hash()] = tx
+        
+        tx_hash = tx.hash()
+        self._mempool[tx_hash] = tx
+        self._time_log[tx_hash] = int(time.time())
 
         # Check if any outputs satisfy as parents to orphan txns
-        tx_hash = tx.hash()
         for i in range(len(tx.outputs)):
             outpoint = (tx_hash, i)
             if orphan_tx_hash := self._orphan_registry.get(outpoint):
@@ -99,12 +104,15 @@ class Mempool:
                 mempool_tx = self._mempool.get(prev_tx_hash)
                 if mempool_tx is None:
                     # Add into orphan pool
-                    self._orphan_txns[tx.hash()] = tx
-                    self._orphan_registry[outpoint] = tx.hash()
+                    tx_hash = tx.hash()
+                    self._orphan_txns[tx_hash] = tx
+                    self._time_log[tx_hash] = int(time.time())
+                
+                    self._orphan_registry[outpoint] = tx_hash
 
-                    if not self._orphan_missing_utxo.get(tx.hash()):
-                        self._orphan_missing_utxo[tx.hash()] = set()
-                    self._orphan_missing_utxo[tx.hash()].add(outpoint)
+                    if not self._orphan_missing_utxo.get(tx_hash):
+                        self._orphan_missing_utxo[tx_hash] = set()
+                    self._orphan_missing_utxo[tx_hash].add(outpoint)
 
                     log.warning(f"No mempool UTXO found for Input[{i}]. Saved to orphan pool")
                     continue
@@ -126,14 +134,31 @@ class Mempool:
         self._spent_mempool_utxos.update(temp_seen_outputs)
         return True
 
+    def get_valid_tx(self, tx_hash: bytes) -> Transaction | None:
+        return self._mempool.get(tx_hash, None)
+    
+    def get_orphan_tx(self, tx_hash: bytes) -> Transaction | None:
+        return self._orphan_txns.get(tx_hash, None)
+    
     def get_tx_exists(self, tx_hash: bytes) -> bool:
         return tx_hash in self._mempool
 
-    def get_mempool(self) -> list[Transaction]:
+    def get_valid_txs(self) -> list[Transaction]:
         return list(self._mempool.values())
 
+
+    def get_orphan_txs(self) -> list[Transaction]:
+        return list(self._orphan_txns.values())
+
+    def get_tx_time(self, tx_hash: bytes) -> int:
+        """
+        Returns the epoch time of when a transaction is added to the mempool, 
+        both valid and orphan.
+        """
+        return self._time_log.get(tx_hash, 0)
+    
     def remove_from_mempool(self, txn_hashes: list[bytes]):
-        # Used when a new block is mined, either by you or sent over the network
+        # Used when a new block is mined
         for tx_hash in txn_hashes:
             if self._mempool.get(tx_hash):
                 # Blocks sent over may contain txns in the mempool not seen by you yet

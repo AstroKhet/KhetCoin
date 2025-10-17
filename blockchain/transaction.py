@@ -13,6 +13,7 @@ from crypto.hashing import *
 from db.block import get_blockchain_height, median_time_past
 from db.tx import get_txn
 
+from utils.fmt import print_bytes
 from utils.helper import *
 
 
@@ -107,6 +108,8 @@ class TransactionOutput:
     def __init__(self, value: int, script_pubkey: Script):
         self.value = value
         self.script_pubkey = script_pubkey
+
+        self._change = False  # Determines if this output is change
     
     def __str__(self):
         result = "Output:\n"
@@ -124,6 +127,12 @@ class TransactionOutput:
         result: bytes = int_to_bytes(self.value, 8)
         result += self.script_pubkey.serialize()
         return result
+    
+    def set_change(self) -> None:
+        self._change = True
+
+    def is_change(self) -> True:
+        return self._change
 
 
 class Transaction:
@@ -246,10 +255,9 @@ class Transaction:
         msg_hash = self._sig_hash(index)
 
         signature = privkey.sign(msg_hash, hasher=None) + bytes([SIGHASH_ALL])
-
         # P2PKH
-        pk_hash = HASH160(privkey.public_key.format(compressed=True))
-        self.inputs[index].script_sig = Script([signature, pk_hash])
+        pubkey = privkey.public_key.format(compressed=True)
+        self.inputs[index].script_sig = Script([signature, pubkey])
 
         self._serialize_cache = None
         return self.verify_input(index)
@@ -258,6 +266,7 @@ class Transaction:
         """Returns True if all inputs were signed successfully"""
         for i in range(len(self.inputs)):
             if not self.sign_input(i, privkey):
+                log.warning(f"Failed to sign input {i}")
                 return False
         return True
     
@@ -269,6 +278,7 @@ class Transaction:
             script_pubkey = unverified_input.script_pubkey()
             
         if script_pubkey is None:  # Cannot retrieve script_pubkey
+            log.warning(f"Unable to retrieve scriptPubkey from input {index}")
             return False
 
         script_verify = unverified_input.script_sig + script_pubkey
@@ -278,10 +288,12 @@ class Transaction:
 
         msg_hash = self._sig_hash(index)
 
+        if not script_verify.evaluate(msg_hash):
+            log.warning(f"Script evaluation failed for input {index}")
         return script_verify.evaluate(msg_hash)
 
     def verify(self, allow_orphan: bool = False) -> bool:
-        log.info(f"Verifying Transaction<{self.serialize().hex()}>...")
+        log.info(f"Verifying Transaction<{self.hash().hex()}>...")
         if not self.inputs or not self.outputs:
             log.warning(f"<TX {self.hash()}> has empty input and/or output")
             return False
@@ -404,18 +416,32 @@ class Transaction:
         if self.is_coinbase():
             return 0
 
-        value_in = 0
+        input_value = self.input_value()
+        if not input_value:
+            return -1
+        output_value = self.output_value()
+        return  input_value - output_value # should be >0
+
+    def input_value(self):
+        val = 0
         for inp in self.inputs:
             if value := inp.value():
-                value_in += value
+                val += value
             else:
                 log.warning(f"Input {inp} refering to non-existent UTXO")
-                return -1
-
-        value_out = sum(tx_out.value for tx_out in self.outputs)
-
-        return value_in - value_out  # should be >0
-
+                return 0
+        return val
+    
+    def output_value(self, exclude_change=False):
+        val = sum(tx_out.value for tx_out in self.outputs)
+        if exclude_change:
+            val -= self.change_value()
+        return val
+    
+    def change_value(self):
+        val = sum(tx_out.value for tx_out in self.outputs if tx_out.is_change())
+        return val
+    
     def size(self):
         return len(self.serialize())
 

@@ -4,13 +4,12 @@ from tabnanny import check
 import base58
 from coincurve import PrivateKey, PublicKey
 from numpy import byte
-from pydantic import PrivateAttr
 
 from crypto.hashing import HASH256
 
 KEY_DATA_ACCESS_FOLDER = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    ".local/keys"
+    r".local\keys"
 )
 
 def create_private_key() -> bytes:

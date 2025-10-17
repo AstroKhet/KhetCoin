@@ -1,4 +1,5 @@
 
+from gui.frames.blockchain.mempool import MempoolFrame
 from gui.frames.blockchain.view_blockchain import ViewBlockchainFrame
 
 from gui.frames.main.dashboard import DashboardFrame
@@ -15,6 +16,7 @@ FRAMES_CONFIG = {
     "dashboard": DashboardFrame,
     # "settings": SettingsFrame,
     "view_blockchain": ViewBlockchainFrame,
+    "mempool": MempoolFrame, 
     "your_wallet": YourWalletFrame,
     "UTXO": UTXOFrame,
     "transaction_history": TransactionHistoryFrame,

@@ -1,7 +1,6 @@
-from cgitb import text
-import select
+import asyncio
 import tkinter as tk
-from tkinter import Spinbox, ttk
+from tkinter import ttk
 
 import logging
 
@@ -10,10 +9,13 @@ from blockchain.script import Script, P2PKH_script_pubkey
 from blockchain.transaction import Transaction, TransactionInput, TransactionOutput, get_utxo_addr_value
 from crypto.key import get_private_key, wif_decode, wif_encode
 from db.utxo import get_utxo_set
-from gui.bindings import bind_entry_prompt
+from gui.bindings import bind_entry_prompt, bind_hierarchical, mousewheel_cb
 from gui.helper import copy_to_clipboard
 from ktc_constants import KTC
+from networking.messages.envelope import MessageEnvelope
+from networking.messages.types.inv import InvMessage
 from networking.node import Node
+from utils.fmt import format_bytes, truncate_bytes
 from wallet.algorithm import get_recommended_fee_rate, select_utxos
 
 log = logging.getLogger(__name__)
@@ -57,7 +59,7 @@ class PayFrame(tk.Frame):
 
         self.rb_fee_recommended = tk.Radiobutton(self.frame_fee, text="Recommended", variable=self.fee_choice_var, value="recommended", command=self._update_fee_widgets_state)
         self.rb_fee_recommended.grid(row=0, column=0, sticky="w", padx=5, pady=2)
-        self.fee_recommended = get_recommended_fee_rate(node.mempool.get_mempool(), 6)
+        self.fee_recommended = get_recommended_fee_rate(node.mempool.get_valid_txs(), 6)
         self.label_fee_recommended_value = tk.Label(self.frame_fee, text=f"{self.fee_recommended} khets/KB")
         self.label_fee_recommended_value.grid(row=0, column=1, sticky="w", padx=5, pady=2)
         self.var_wait_blocks = tk.IntVar(value=6)
@@ -81,7 +83,7 @@ class PayFrame(tk.Frame):
         self.frame_options = tk.Frame(self)
         self.frame_options.pack(side="bottom", fill="x", padx=10, pady=(5, 10))
 
-        self.btn_send = ttk.Button(self.frame_options, text="Send", command=self._send_txn_window)
+        self.btn_send = ttk.Button(self.frame_options, text="Send", command=self._send_tx_window)
         self.btn_send.pack(side="left", padx=2)
         self.btn_add_recipient = ttk.Button(self.frame_options, text="Add Recipient", command=self._add_recipient_block)
         self.btn_add_recipient.pack(side="left", padx=2)
@@ -89,13 +91,15 @@ class PayFrame(tk.Frame):
         self.btn_clear_all.pack(side="left", padx=2)
 
         balance_val = get_utxo_addr_value(self.node.pk_hash) / KTC
-        self.btn_wallet = ttk.Button(self.frame_options, text="Wallet", command=lambda: self.controller.switch_to_frame("wallet"))
+        self.btn_wallet = ttk.Button(self.frame_options, text="Wallet", command=lambda: self.controller.switch_to_frame("your_wallet"))
         self.btn_wallet.pack(side="right", padx=2)
         self.label_balance = tk.Label(self.frame_options, text=f"Balance: {balance_val:.8f} KTC")
         self.label_balance.pack(side="right", padx=2)
 
+        self._selected_tx: Transaction | None = None
         self._add_recipient_block()
         self._update_fee_widgets_state()
+        
 
     def _add_recipient_block(self):
         row_index = len(self.recipient_frames)
@@ -154,7 +158,7 @@ class PayFrame(tk.Frame):
 
     def _update_recommended_fee(self, *_):
         wait_blocks = self.var_wait_blocks.get()
-        self.fee_recommended = get_recommended_fee_rate(self.node.mempool.get_mempool(), wait_blocks)
+        self.fee_recommended = get_recommended_fee_rate(self.node.mempool.get_valid_txs(), wait_blocks)
         self.label_fee_recommended_value.config(text=f"{self.fee_recommended} khets/KB")
         
     def _update_fee_widgets_state(self):
@@ -185,7 +189,7 @@ class PayFrame(tk.Frame):
     def _get_fee_rate(self):
         choice = self.fee_choice_var.get()
         if choice == "recommended":
-            return get_recommended_fee_rate(self.node.mempool.get_mempool())
+            return get_recommended_fee_rate(self.node.mempool.get_valid_txs())
         else:
             fee = self.var_fee_custom.get()
             if self.var_fee_unit.get() == "KTC":
@@ -194,15 +198,17 @@ class PayFrame(tk.Frame):
         
     def _generate_txn(self) -> Transaction | None:
         sfv_value, op_value = 0, 0
+        # Collecting total values from outputs with subtract-from-fee enabled
         for output_fields in self.recipient_frames.values():
             value = output_fields["value"].get()
             unit = output_fields["unit"].get()
             sub = output_fields["sub"].get()
             if unit == "KTC":
                     value *= KTC
-            sfv_value += int(sub * value)
+            sfv_value += int(value) if sub else 0
             op_value += int(value)
-                
+        
+        # OUTPUTS
         outputs = []
         for frame_recipient, output_fields in self.recipient_frames.items():
             pk_hash = wif_decode(output_fields["addr"].get())
@@ -235,10 +241,11 @@ class PayFrame(tk.Frame):
             log.warning("You cannot pay more than what you currently have!")
             return None
 
-        n_input_guess, max_iterations = 1, 5
+        n_input_guess = 1
         inputs, utxos = [], []
-
-        for _ in range(max_iterations):
+        
+        fee = 0
+        for _ in range(5):
             # Estimate fee based on guessed number of inputs
             fee = self._get_fee_rate() * n_input_guess
             target = op_value + fee
@@ -257,7 +264,8 @@ class PayFrame(tk.Frame):
             if n_inputs_actual == n_input_guess:
                 break
             n_input_guess = n_inputs_actual
-
+        
+        # INPUTS
         for utxo in utxos:
             inputs.append(TransactionInput(
                 prev_hash=utxo.txn_hash,
@@ -265,38 +273,78 @@ class PayFrame(tk.Frame):
                 script_sig=Script([]),
                 sequence=0xffffffff
             ))
-            
+        
+        if sfv_value > 0:
+            change_value = sum(utxo.value for utxo in utxos) - op_value
+        else:
+            change_value = sum(utxo.value for utxo in utxos) - op_value - fee
+
+        change_output = TransactionOutput(
+            value=int(change_value),
+            script_pubkey=P2PKH_script_pubkey(self.node.pk_hash)  # Change addr
+        )
+        change_output.set_change()
+
+        outputs.append(change_output)
         txn = Transaction(
             version=TXN_VERSION,
             inputs=inputs,
             outputs=outputs,
             locktime=0
         )
-        
-        txn.sign(get_private_key(self.node.name, raw=False)) # type: ignore
-        return txn
+        if txn.sign(get_private_key(self.node.name, raw=False)): # type: ignore
+            self._selected_tx = txn
+            return txn
+        else:
+            log.warning("Signing failed when creating transaction")
+            return None
     
-    
-    def _send_txn_window(self):
-        win_txn_summary = tk.Toplevel(self)
-        win_txn_summary.title("Confirm Transaction")
-        win_txn_summary.geometry("300x400")
+    def _send_tx(self):
+        if not self._selected_tx:
+            log.warning("Attempted to send invalid transaction")
+            return
         
-        # 1. Scrollable frame for viewing txn summary
-        frame_txn_summary = tk.Frame(win_txn_summary)
-        frame_txn_summary.grid(row=0, column=0, sticky="nsew")
-        frame_txn_summary.columnconfigure(0, weight=1)
-        frame_txn_summary.rowconfigure(0, weight=1)
+        # 1. InvMessage creation
+        inv_msg = InvMessage(
+            [(1, self._selected_tx.serialize())]
+        )
 
-        cnv_txn_summary = tk.Canvas(frame_txn_summary, highlightthickness=0)
+        msg = MessageEnvelope(inv_msg.command, inv_msg.payload)
+
+        # 2. TXN broadcasting and storage
+        self.node.mempool.add_tx(self._selected_tx)
+        self.node.broadcast(msg)
+        
+        # log.info(f"Transaction broadcasted to all peers\n{str(self._selected_tx)}")
+    
+    def _send_tx_window(self):
+        win_tx = tk.Toplevel(self)
+        win_tx.title("Confirm Transaction")
+        win_tx.geometry("600x500")
+        
+        self._selected_tx = self._generate_txn()
+        if not self._selected_tx:
+            tk.Label(win_tx, text="Error generating transaction", fg="red").pack()
+            return 
+        
+        win_tx.rowconfigure(0, weight=5, uniform="txn_preview")
+        win_tx.rowconfigure(1, weight=2, uniform="txn_preview")
+        win_tx.rowconfigure(2, weight=1, uniform="txn_preview")
+        win_tx.columnconfigure(0, weight=1)
+
+        # 0. Scrollable frame for viewing txn summary
+        frame_txn_scrollable = tk.Frame(win_tx)
+        frame_txn_scrollable.grid(row=0, column=0, sticky="nsew")
+        frame_txn_scrollable.columnconfigure(0, weight=1)
+        frame_txn_scrollable.rowconfigure(0, weight=1)
+
+        cnv_txn_summary = tk.Canvas(frame_txn_scrollable, highlightthickness=0)
         cnv_txn_summary.grid(row=0, column=0, sticky="nsew")
         
-        vsb_txn_summary = ttk.Scrollbar(frame_txn_summary, orient="vertical", command=cnv_txn_summary.yview)
+        vsb_txn_summary = ttk.Scrollbar(frame_txn_scrollable, orient="vertical", command=cnv_txn_summary.yview)
         vsb_txn_summary.grid(row=0, column=1, sticky="ns")
-        hsb_txn_summary = ttk.Scrollbar(frame_txn_summary, orient="horizontal", command=cnv_txn_summary.xview)
-        hsb_txn_summary.grid(row=1, column=0, sticky="ew")
 
-        cnv_txn_summary.configure(yscrollcommand=vsb_txn_summary.set, xscrollcommand=hsb_txn_summary.set)
+        cnv_txn_summary.configure(yscrollcommand=vsb_txn_summary.set)
         
         frame_txn_details = tk.Frame(cnv_txn_summary)
         frame_txn_details.columnconfigure(0, weight=1)
@@ -311,16 +359,56 @@ class PayFrame(tk.Frame):
             "<Configure>",
             lambda _: cnv_txn_summary.configure(scrollregion=cnv_txn_summary.bbox("all"))
         )
-        
+
+        # 1. Transaction Summary
+        lf_tx_summary = ttk.LabelFrame(win_tx, text="Summary")
+        lf_tx_summary.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+
+        # Configure equal column weight for even spacing
+        lf_tx_summary.columnconfigure(0, weight=1)
+        lf_tx_summary.columnconfigure(1, weight=1)
+
+        # Left frame (inputs, outputs, size)
+        frame_txn_summary_left = tk.Frame(lf_tx_summary)
+        frame_txn_summary_left.columnconfigure(0, weight=1)
+        frame_txn_summary_left.columnconfigure(1, weight=1)
+        frame_txn_summary_left.grid(row=0, column=0, sticky="nsew", padx=10)
+
+        tk.Label(frame_txn_summary_left, text="Input value:").grid(row=0, column=0, sticky="w")
+        tk.Label(frame_txn_summary_left, text=f"{self._selected_tx.input_value()/KTC:.8f} KTC").grid(row=0, column=1, sticky="e")
+
+        tk.Label(frame_txn_summary_left, text="Output value:").grid(row=1, column=0, sticky="w")
+        tk.Label(frame_txn_summary_left, text=f"{self._selected_tx.output_value(exclude_change=True)/KTC:.8f} KTC").grid(row=1, column=1, sticky="e")
+
+        tk.Label(frame_txn_summary_left, text="Change value:").grid(row=2, column=0, sticky="w")
+        tk.Label(frame_txn_summary_left, text=f"{self._selected_tx.change_value()/KTC:.8f} KTC").grid(row=2, column=1, sticky="e")
+
+        txn_size = len(self._selected_tx.serialize())
+        tk.Label(frame_txn_summary_left, text="Transaction size:").grid(row=3, column=0, sticky="w")
+        tk.Label(frame_txn_summary_left, text=format_bytes(txn_size)).grid(row=3, column=1, sticky="e")
+
+        # Right frame (fees)
+        frame_txn_summary_right = tk.Frame(lf_tx_summary)
+        frame_txn_summary_right.columnconfigure(0, weight=1)
+        frame_txn_summary_right.columnconfigure(1, weight=1)
+        frame_txn_summary_right.grid(row=0, column=1, sticky="nsew", padx=10)
+
+        total_fee = self._selected_tx.fee()
+        tk.Label(frame_txn_summary_right, text="Total fee:").grid(row=0, column=0, sticky="w")
+        tk.Label(frame_txn_summary_right, text=f"{total_fee / KTC:.8f} KTC").grid(row=0, column=1, sticky="e")
+
+        fee_rate = total_fee / txn_size if txn_size > 0 else 0
+        tk.Label(frame_txn_summary_right, text="Fee rate:").grid(row=1, column=0, sticky="w")
+        tk.Label(frame_txn_summary_right, text=f"{fee_rate:.2f} khets/B").grid(row=1, column=1, sticky="e")
+    
         # 2. Content for txn summary window
-        txn = self._generate_txn()
-        if txn is None:
-            label_err = tk.Label(frame_txn_summary, text="Error creating transaction. See console log.")
-            label_err.pack()
+        if self._selected_tx is None:
+            label_err = tk.Label(frame_txn_scrollable, text="Error creating transaction. See console log.")
+            label_err.grid(row=0, column=0)
             return
         
         # Copied from /gui/frames/blockchain/view_blockchain.py
-        frame_txn_io = tk.Frame(frame_txn_summary)
+        frame_txn_io = tk.Frame(frame_txn_details)
         frame_txn_io.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         frame_txn_io.columnconfigure(0, weight=1, uniform="txnio_cols")
         frame_txn_io.columnconfigure(1, weight=1, uniform="txnio_cols")
@@ -329,10 +417,10 @@ class PayFrame(tk.Frame):
         tk.Label(frame_txn_io, text="From", font=("Arial", 10, "bold"), padx=5, pady=5).grid(row=0, column=0, sticky="w")
         tk.Label(frame_txn_io, text="To", font=("Arial", 10, "bold"), padx=5, pady=5).grid(row=0, column=1, sticky="w")
 
-        for i, tx_in in enumerate(txn.inputs, start=1):
+        for i, tx_in in enumerate(self._selected_tx.inputs, start=1):
             script_sig = tx_in.script_sig
             script_pk = tx_in.script_pubkey()
-            if txn.is_coinbase():
+            if self._selected_tx.is_coinbase():
                 addr = "Coinbase"
             else:
                 addr = script_sig.get_script_sig_sender() or "N/A"
@@ -354,7 +442,7 @@ class PayFrame(tk.Frame):
             tk.Label(frame_input, text=f"{value/KTC:.8f}KTC", fg="gray").grid(row=1, column=0, sticky="w")
 
         # Outputs
-        for i, tx_out in enumerate(txn.outputs, start=1):
+        for i, tx_out in enumerate(self._selected_tx.outputs, start=1):
             script_pk = tx_out.script_pubkey
             value = tx_out.value
             addr = script_pk.get_script_pubkey_receiver() or "N/A"
@@ -373,12 +461,15 @@ class PayFrame(tk.Frame):
             ).grid(row=0, column=2)
 
             tk.Label(frame_output, text=f"{value/KTC:.8f}KTC", fg="gray").grid(row=1, column=0, sticky="w")
-        pass
+        
+        btn_send = ttk.Button(win_tx, text="Send Transaction", command=lambda: (self._send_tx(), win_tx.destroy()))
+        btn_send.grid(row=2, column=0, padx=15, pady=15, sticky="e")
+        bind_hierarchical("<MouseWheel>", frame_txn_scrollable, lambda e: mousewheel_cb(e, cnv_txn_summary))
 
     def _show_script_window(self, script_sig: Script | None=None, script_pubkey: Script | None=None):
         # Copied from /gui/frames/blockchain/view_blockchain.py
         win_script = tk.Toplevel(self)
-        win_script.title(f"Script for Transaction {truncate_bytes(self.selected_txn.hash())}") # type: ignore
+        win_script.title(f"Script for Transaction {truncate_bytes(self._selected_tx.hash())}") # type: ignore
         win_script.geometry("300x200")
         
         frame_script = tk.Frame(win_script, padx=10, pady=10)

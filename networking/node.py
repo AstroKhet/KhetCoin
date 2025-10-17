@@ -152,7 +152,7 @@ class Node:
             log.exception(f"[{self.name}] Error during handshake with peer {peer.str_ip}: {e}")
             await peer.close()
 
-    async def broadcast(self, 
+    def broadcast(self, 
         message: MessageEnvelope, 
         exclude: Optional[Peer] = None,
         sample: int = MAX_PEERS,
@@ -258,12 +258,10 @@ class Node:
     async def _connect_initial_peers(self):
         log.info("Connecting to initial peers...")
         peers_to_connect = await load_peers()
-        # print(peers_to_connect)
         if not peers_to_connect:
             return 
 
         for ip, port, name, *_ in peers_to_connect:
-            print(ip, port, name)
             self.add_task(
                 asyncio.create_task(
                     self.connect_to_peer((ip, port), name)

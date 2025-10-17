@@ -11,6 +11,13 @@ class InvMessage:
     """
     command = b"inv"
     def __init__(self, inventory: list[tuple[int, bytes]]):
+        """
+        inventory | list[tuple[int, bytes]]: A set containing the type and serialization of somedata
+        
+        Types:
+        - 1: Transaction
+        - 2: Block
+        """
         self.inventory = inventory
 
         self.payload = encode_varint(len(inventory))
