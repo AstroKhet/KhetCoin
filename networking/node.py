@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 
 class Node:
-    def __init__(self, name: str, host: str = "0.0.0.0", port: int = 9333):
+    def __init__(self, name: str, host: str = "0.0.0.0", port: int = 9333, loop=None):
         self.name = name
         self.host = host
         self.port = port
@@ -32,10 +32,12 @@ class Node:
         # Self (server)
         self.server: asyncio.Server | None = None
         self.server_start_time: int = 0
+        self.loop = loop
         self.mempool = Mempool()
 
         # Clients (peers)
-        self.peer_id: int = 0
+        self.next_peer_id: int = 0
+        self.peer_id_lookup: dict = dict()
         self.bytes_recv: int = 0
         self.bytes_sent: int = 0
 
@@ -45,6 +47,9 @@ class Node:
 
         self._shutdown_requested = asyncio.Event()
         self._tasks: Set[asyncio.Task] = set()
+        
+        # Transient variables for efficient GUI update
+        self._updated_peers = False
 
         log.info(f"Node '{self.name}' initialized on {self.host}:{self.port}")
 
@@ -75,6 +80,7 @@ class Node:
 
         peers_to_close = list(self.peers)
         self.peers.clear()
+        self._updated_peers = True
 
         for peer in peers_to_close:
             awaitables.append(peer.close())
@@ -133,8 +139,9 @@ class Node:
             log.exception(f"[{self.name}] Unexpected error connecting TCP to {peer_str_ip}: {e}")
             return
 
-        peer = Peer(self, reader, writer, name, session_id=self.peer_id, direction="outbound")
-        self.peer_id += 1
+        peer = Peer(self, reader, writer, name, session_id=self.next_peer_id, direction="outbound")
+        self.peer_id_lookup[self.next_peer_id] = peer
+        self.next_peer_id += 1
         listen_task = asyncio.create_task(peer.listen())
         peer.listen_task = listen_task
         self.add_task(listen_task)
@@ -146,6 +153,7 @@ class Node:
             )
             if established:
                 self.peers.add(peer)
+                self._updated_peers = True
             else:
                 log.warning(f"[{self.name}] Handshake failed with peer {peer.str_ip}.")
         except Exception as e:
@@ -172,9 +180,7 @@ class Node:
         )
 
         for peer in target_peers:
-            self.add_task(
-                asyncio.create_task(peer.send_message(message))
-            )
+            asyncio.run_coroutine_threadsafe(peer.send_message(message), self.loop)
 
     async def _handle_incoming_connection(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -196,8 +202,9 @@ class Node:
             return
 
         # Create peer object
-        peer = Peer(self, reader, writer, session_id=self.peer_id, direction="inbound")
-        self.peer_id += 1
+        peer = Peer(self, reader, writer, session_id=self.next_peer_id, direction="inbound")
+        self.peer_id_lookup[self.next_peer_id] = peer
+        self.next_peer_id += 1
 
         # Start listening to peer
         log.info(
@@ -219,18 +226,14 @@ class Node:
                 peer.established, timeout=HANDSHAKE_TIMEOUT
             )
             if established:
-                log.info(
-                    f"[{self.name}] Handshake successful with incoming peer {peer.str_ip}. Adding to peers."
-                )
+                log.info(f"[{self.name}] Handshake successful with incoming peer {peer.str_ip}. Adding to peers.")
                 self.peers.add(peer)
+                self._updated_peers = True
             else:
-                log.warning(
-                    f"[{self.name}] Handshake failed or rejected by incoming peer {peer.str_ip} (established=False)."
-                )
+                log.warning(f"[{self.name}] Handshake failed or rejected by incoming peer {peer.str_ip} (established=False).")
+        
         except Exception as e:
-            log.exception(
-                f"[{self.name}] Error during handshake with incoming peer {peer.str_ip}: {e}"
-            )
+            log.exception(f"[{self.name}] Error during handshake with incoming peer {peer.str_ip}: {e}")
             if not peer.writer.is_closing():
                 await peer.close()
 
@@ -294,14 +297,22 @@ class Node:
 
     def remove_peer(self, peer: Peer):
         self.peers.discard(peer)
+        self.peer_id_lookup.pop(peer.session_id)
+        self._updated_peers = True
+        log.info(f"Peer No. {peer.session_id} disconnected.")
 
     def get_peer_by_id(self, peer_id: int) -> Peer | None:
-        for peer in self.peers:
-            if peer.session_id == peer_id:
-                return peer
-        else:
-            return None
-
+        return self.peer_id_lookup.get(peer_id)
+        
+    def check_updated_peers(self):
+        """
+        Checks if any transactions were added or removd from self.peers
+        from the last time this function was called
+        """
+        updated = self._updated_peers
+        self._updated_peers = False
+        return updated
+    
     @property
     def uptime(self) -> int:
         if self.server_start_time:

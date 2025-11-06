@@ -22,7 +22,6 @@ log = logging.getLogger(__name__)
 
 
 class Peer:
-
     def __init__(
         self,
         node,
@@ -117,9 +116,9 @@ class Peer:
         else:  # Should not happen unless you messed with the source code
             log.exception(f"Attempted to send invalid message type: {type(msg)}")
             return 
-            
+        
         cmd = envelope.command.decode("ascii", errors="replace")
-        log.debug(f"[{self.str_ip}] Attempting to send message: {cmd}")
+        log.info(f"Sending message: {msg.command}")
 
         try:
             serialized_envelope = envelope.serialize()
@@ -196,9 +195,6 @@ class Peer:
 
     # TODO: deai
     async def close(self):
-        if self.writer.is_closing():
-            return
-
         log.info(f"[{self.str_ip}] Closing connection...")
         if self.listen_task and not self.listen_task.done():
             log.debug(f"[{self.str_ip}] Cancelling listen task.")
@@ -207,18 +203,12 @@ class Peer:
         try:
             self.writer.close()
             await self.writer.wait_closed()
-            log.debug(f"[{self.str_ip}] Writer closed.")  # *** ADDED LOGGING ***
+            log.debug(f"[{self.str_ip}] Writer closed.")
         except Exception as e:
-            log.error(f"[{self.str_ip}] Error closing writer: {e}")
+            log.warning(f"[{self.str_ip}] Error closing writer; peer might have had an ungraceful shutdown.\n{e}")
         finally:
-            self.node.remove_peer(self)  # remove_peer now logs removal
-            if not self.established.done():
-                # *** ADDED LOGGING ***
-                log.debug(
-                    f"[{self.str_ip}] Setting established future to False as connection closed."
-                )
-                self.established.set_result(False)
-        log.info(f"[{self.str_ip}] Connection closed.")  # *** ADDED LOGGING ***
+            print(f"removing peer {self.session_id}...")
+            self.node.remove_peer(self) 
 
     def save(self):
         # TODO: Saves peer inside PEERS_SQL
@@ -273,7 +263,7 @@ class Peer:
         return None
 
     def __hash__(self):
-        return hash(self.addr)
+        return self.session_id
 
     def __eq__(self, other: 'Peer'):
         return hash(self) == hash(other)

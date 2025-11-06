@@ -91,11 +91,8 @@ class MessageProcessor:
         # Payload (maximum 50,000 entries, which is just over 1.8 megabytes):
 
         inventory = msg.inventory
-        missing_data = {
-            TX_TYPE: [],  # TX
-            BLOCK_TYPE: []   # Block
-        }  # Statically typed because there will ever only be this many inv types
-
+        print(inventory)
+        missing_inventory = []
         for item in inventory:
             inv_type, inv_hash = item
             if inv_type == TX_TYPE:  # TX
@@ -108,11 +105,12 @@ class MessageProcessor:
                     continue
             else: # 0 or some other invalid type - ignore
                 continue
-            missing_data[inv_type].append(inv_hash)
-
-        for inv_type, inv_hashes in missing_data.items():
-            getdata_msg = GetDataMessage(inv_hashes)
-            await peer.send_message(getdata_msg)
+            missing_inventory.append(
+                (inv_type, inv_hash)
+            )
+            
+        getdata_msg = GetDataMessage(missing_inventory)
+        await peer.send_message(getdata_msg)
 
     async def process_getaddr(self, peer: Peer, msg: GetAddrMessage):
         addresses = set()
@@ -257,16 +255,18 @@ class MessageProcessor:
         inventory = msg.inventory
 
         notfound_items = []
+        print(inventory[0][1].hex())
+        print(self.node.mempool.get_all_valid_tx()[0].hash().hex())
         for inv_type, inv_hash in inventory:
             if inv_type == TX_TYPE:
                 if tx := get_txn(inv_hash):  # Stored in local blockchain
                     tx_msg = TxMessage(tx)
                     await peer.send_message(tx_msg)
 
-                elif tx := self.node.mempool.get_tx_exists(inv_hash):
+                elif tx := self.node.mempool.get_tx(inv_hash):
                     tx_msg = TxMessage(tx)   # Stored in local Mempool
                     await peer.send_message(tx_msg)   
-
+                    
             elif inv_type == BLOCK_TYPE:
                 if block := get_block(inv_hash):
                     block_msg = BlockMessage(block)
@@ -275,7 +275,10 @@ class MessageProcessor:
 
             notfound_items.append((inv_type, inv_hash))
 
-        await peer.send_message(NotFoundMessage(notfound_items))
+        if notfound_items:
+            print(notfound_items[0][1].hex())
+            print(notfound_items)
+            await peer.send_message(NotFoundMessage(notfound_items))
 
     async def process_tx(self, peer: Peer, msg: TxMessage):
         tx_raw = msg.tx
@@ -298,5 +301,5 @@ class MessageProcessor:
         return
 
     async def process_notfound(self, peer: Peer, msg: NotFoundMessage):
-        missing = msg.inventory
+        log.info(f"Received notfound message from peer {peer}")
         return

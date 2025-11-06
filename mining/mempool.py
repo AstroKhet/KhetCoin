@@ -14,7 +14,7 @@ class Mempool:
     """
     def __init__(self) -> None:
         # 1. Validated transactions are stored in mempool
-        self._mempool: dict[bytes, Transaction] = dict()
+        self._valid_txns: dict[bytes, Transaction] = dict()
 
         # 2. Orphan transactions & utility variables
         self._orphan_txns:         dict[bytes, Transaction]            = dict()
@@ -26,15 +26,42 @@ class Mempool:
 
         # 3. Stores UTXOs spent in current mempool
         self._spent_mempool_utxos: set[tuple[bytes, int]] = set()
+        
+        # 4. Transient variables for efficient GUI updating
+        self._updated_valids = False
+        self._updated_orphans = False
 
     def add_tx(self, tx: Transaction) -> bool:
-        if not self.check_mempool_eligibility(tx):
-            return False
-        
-        tx_hash = tx.hash()
-        self._mempool[tx_hash] = tx
-        self._time_log[tx_hash] = int(time.time())
-
+        match self.get_mempool_eligibility(tx):
+            case "orphan":
+                if tx.verify(allow_orphan=True):
+                    tx_hash = tx.hash()
+                    self._orphan_txns[tx_hash] = tx
+                    self._time_log[tx_hash] = int(time.time())
+                    
+                    self._updated_orphans = True
+                    log.info("Successfully saved to orphan pool")
+                else:
+                    log.warning("Failed to verify orphan tx")
+                    return False
+                
+            case "valid":
+                if tx.verify():
+                    if tx.fee() < MIN_RELAY_TX_FEE:
+                        log.warning(f"Tx fee ({tx.fee()} khets) is too low (Min: {MIN_RELAY_TX_FEE} khets)")
+                        return False
+                    tx_hash = tx.hash()
+                    self._valid_txns[tx_hash] = tx
+                    self._time_log[tx_hash] = int(time.time())
+                    
+                    self._updated_valids = True
+                    log.info("Successfully saved to valid mempool")
+                else:
+                    log.warning("Failed to verify tx")
+                    return False
+            case _:
+                return False
+ 
         # Check if any outputs satisfy as parents to orphan txns
         for i in range(len(tx.outputs)):
             outpoint = (tx_hash, i)
@@ -56,98 +83,85 @@ class Mempool:
 
         return True
 
-    def check_mempool_eligibility(self, tx: Transaction):
-        log.info(f"Checking mempool eligibility for TX<{tx.hash()}>")
-        if not tx.verify(allow_orphan=True):  
-            return False
-
+    def get_mempool_eligibility(self, tx: Transaction) -> str:
+        """
+        Returns the mempool status of a new transaction,
+        which is either "valid" | "orphan" | "invalid"
+        """
+        
+        tx_hash = tx.hash()
+        status = "valid"
+        log.info(f"Checking mempool eligibility for TX<{tx_hash.hex()}>")
+        
+        
+        # Check if new transaction double spends UTXOs
+        #   a) If tx does not exist, store as orphan
+        #   b) If tx exists but output id is out of bounds, reject.
+        #   c) If tx exists but is not part of UTXO set, reject (double spend)
+        #   d) If tx exists but is is self._spent_mempool_utxos, reject (double spend)
+        #   e) If tx exists and is part of UTXO set, accept
         if tx.is_coinbase():
             log.warning("Coinbase transactions should not be relayed. Rejected from mempool.")
-            return False
+            return "invalid"
 
-        if tx.fee() < MIN_RELAY_TX_FEE:
-            log.warning("Txn fee < MIN_RELAY_FEE. Rejected")
-            return False
-
-        # Intra-Txn Double spending checks already handled in tx.verify; don't need to worry about
-        # duplicate tx outpoints below
-        temp_seen_outputs = set()
         for i, input in enumerate(tx.inputs):
             prev_tx_hash = input.prev_tx_hash
             prev_id = input.prev_index
             outpoint = (prev_tx_hash, prev_id)
+            
+            if outpoint in self._spent_mempool_utxos:
+                log.warning(f"Input[{i}] double-spends mempool tx output: {(prev_tx_hash.hex(), prev_id)}")
+                return "invalid"
 
-            # Trying to spend an output that another txn in the mempool has used
-            if outpoint in self._spent_mempool_utxos or \
-               outpoint in temp_seen_outputs:
-                log.warning(f"Input[{i}] double-spends {(prev_tx_hash.hex(), prev_id)}")
-                return False
-
-            # 1. UTXO CHECK
-            utxo_raw = get_txn(prev_tx_hash)
-            if utxo_raw:
+            if utxo_raw := get_txn(prev_tx_hash):
                 utxo = Transaction.parse_static(utxo_raw).outputs[prev_id]
                 if not tx.verify_input(i, utxo.script_pubkey):
                     log.warning(f"Input[{i}] failed to verify.")
-                    return False
+                    return "invalid"
 
-            # utxo_raw = get_utxo(*outpoint)
-            # if utxo_raw:  # Verify Script
-            #     utxo = TransactionOutput.parse(BytesIO(utxo_raw))
-            #     if not tx.verify_input(i, utxo.script_pubkey):
-            #         log.warning(f"Input[{i}] failed to verify.")
-            #         return False
-
-            else:  # 2. MEMPOOL CHECK if no UTXO found
-                log.info(f"No valid UTXO found for Input[{i}]. Checking through mempool now...")
-
-                mempool_tx = self._mempool.get(prev_tx_hash)
-                if mempool_tx is None:
-                    # Add into orphan pool
-                    tx_hash = tx.hash()
-                    self._orphan_txns[tx_hash] = tx
-                    self._time_log[tx_hash] = int(time.time())
-                
+            else: 
+                log.info(f"No valid UTXO found for Input[{i}]. Checking through mempool...")
+                mempool_tx = self._valid_txns.get(prev_tx_hash)
+                if mempool_tx is None:  # Add into orphan pool
+                    log.info(f"No UTXO found for Input[{i}]. Saved to orphan pool")
                     self._orphan_registry[outpoint] = tx_hash
 
                     if not self._orphan_missing_utxo.get(tx_hash):
                         self._orphan_missing_utxo[tx_hash] = set()
                     self._orphan_missing_utxo[tx_hash].add(outpoint)
-
-                    log.warning(f"No mempool UTXO found for Input[{i}]. Saved to orphan pool")
-                    continue
-
-                elif not (0 <= prev_id < len(mempool_tx.outputs)):
-                    log.warning(f"Mempool UTXO index referenced by Input[{i}] is out of bounds.")
-                    return False
+                    status = "orphan"
 
                 else:
-                    tx_out = mempool_tx.outputs[prev_id]
+                    try:
+                        tx_out = mempool_tx.outputs[prev_id]
+                    except KeyError:
+                        log.warning(f"Mempool UTXO index referenced by Input[{i}] is out of bounds.")
+                        return "invalid"
+                    
                     if not tx.verify_input(i, tx_out.script_pubkey):
                         log.warning(f"Unlocking script for Input[{i}] failed")
-                        return False
+                        return "invalid"
                     self._spent_mempool_utxos.add(outpoint)
 
-            temp_seen_outputs.add(outpoint)
-
-        # Txn is eligible for mempool membership
-        self._spent_mempool_utxos.update(temp_seen_outputs)
-        return True
+        return status
 
     def get_valid_tx(self, tx_hash: bytes) -> Transaction | None:
-        return self._mempool.get(tx_hash, None)
+        return self._valid_txns.get(tx_hash, None)
     
     def get_orphan_tx(self, tx_hash: bytes) -> Transaction | None:
         return self._orphan_txns.get(tx_hash, None)
     
+    def get_tx(self, tx_hash: bytes) -> Transaction | None:
+        # Get txn regardless as long as its in mempool
+        return self.get_valid_tx(tx_hash) or self.get_orphan_tx(tx_hash)
+    
     def get_tx_exists(self, tx_hash: bytes) -> bool:
-        return tx_hash in self._mempool
+        return tx_hash in self._valid_txns
 
-    def get_valid_txs(self) -> list[Transaction]:
-        return list(self._mempool.values())
+    def get_all_valid_tx(self) -> list[Transaction]:
+        return list(self._valid_txns.values())
 
-
-    def get_orphan_txs(self) -> list[Transaction]:
+    def get_all_orphan_tx(self) -> list[Transaction]:
         return list(self._orphan_txns.values())
 
     def get_tx_time(self, tx_hash: bytes) -> int:
@@ -160,6 +174,26 @@ class Mempool:
     def remove_from_mempool(self, txn_hashes: list[bytes]):
         # Used when a new block is mined
         for tx_hash in txn_hashes:
-            if self._mempool.get(tx_hash):
+            if self._valid_txns.get(tx_hash):
                 # Blocks sent over may contain txns in the mempool not seen by you yet
-                del self._mempool[tx_hash]
+                del self._valid_txns[tx_hash]
+
+    # Modifiers for transient GUI variables
+    
+    def check_update_valids(self):
+        """
+        Checks if any transactions were added or removd from self._mempool 
+        from the last time this function was called
+        """
+        updated = self._updated_valids
+        self._updated_valids = False
+        return updated
+
+    def check_update_orphans(self):
+        """
+        Checks if any transactions were added or removd from self._orphan_txns
+        from the last time this function was called
+        """
+        updated = self._updated_orphans
+        self._updated_orphans = False
+        return updated

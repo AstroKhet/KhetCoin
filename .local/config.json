@@ -1,11 +1,24 @@
 {
-    "node" : {
+    "node": {
         "name": "Khet",
-        "minRelayTxFee": 100,
-        "transaction_history": []
+        "min_relay_fee": 100,
+        "max_peers": 8
+    },
+    "mining": {
+        "auto_enabled": false,
+        "min_total_fee": 0
     },
 
-    "gui": {
-        "theme": "light"
+    "path": {
+        "addresses": ".local/addresses.db",
+        "peers": ".local/peers.db",
+        "blockchain": ".data/blockchain/",
+        "lmdb": ".data/lmdb/"
+    },
+
+    "app": {
+        "run_node_on_startup": false,
+        "log_level": "warning",
+        "initial_setup": true
     }
 }

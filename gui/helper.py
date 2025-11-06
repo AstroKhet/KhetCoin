@@ -44,3 +44,21 @@ def attach_tooltip(widget, text, delay=150):
 def copy_to_clipboard(widget, text: str):
     widget.clipboard_clear()
     widget.clipboard_append(text)
+
+
+def display_error_window(widget, title: str, err: str, info: str = ""):
+    """ 
+    (Currently) a simple error reporting GUI
+    """
+    win = tk.Toplevel(widget)
+    win.title(title)
+    win.geometry("500x360")
+    win.transient(widget)
+    win.grab_set()
+    
+    tk.Label(win, text=err, fg="red", font=('Arial', 12)).pack()
+    
+    if info:
+        tk.Label(win, text=info).pack()
+        
+    tk.Label(win, text="Close this window to continue.", font=('Arial', 7)).pack()

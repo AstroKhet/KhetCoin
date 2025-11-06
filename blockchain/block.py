@@ -4,8 +4,9 @@ import time
 from typing import List, BinaryIO
 
 from db.block import get_blk_dat_no, get_block_at_height, get_block_height_at_hash, get_block_timestamp
-from db.constants import BLOCK_MAGIC, BLOCKCHAIN_DIR, BLOCKS_DB, DAT_SIZE, HEIGHT_DB, TX_DB, UTXO_DB
+from db.constants import BLOCK_MAGIC, BLOCKS_DB, DAT_SIZE, HEIGHT_DB, TX_DB, UTXO_DB
 from utils.helper import *
+from utils.config import APP_CONFIG
 from crypto.hashing import *
 from blockchain.transaction import *
 from blockchain.merkle_tree import *
@@ -291,14 +292,14 @@ def save_block(block: Block) -> bool:
 
     # .dat file config
     dat_file_no = get_blk_dat_no()
-    dat_file = os.path.join(BLOCKCHAIN_DIR, f"blk{dat_file_no:08}.dat")
+    dat_file = os.path.join(APP_CONFIG.get("path", "blockchain"), f"blk{dat_file_no:08}.dat")
     if not os.path.exists(dat_file):
         open(dat_file, "wb").close()
 
     offset = os.path.getsize(dat_file)
     if offset + block_size > DAT_SIZE:
         dat_file_no += 1
-        dat_file = os.path.join(BLOCKCHAIN_DIR, f"blk{dat_file_no:08}.dat")
+        dat_file = os.path.join(APP_CONFIG.get("path", "blockchain"), f"blk{dat_file_no:08}.dat")
 
     # Saving data
     height = get_blockchain_height() + 1
@@ -352,7 +353,7 @@ def save_block(block: Block) -> bool:
 
                         pk = tx_in.script_sig.get_script_sig_sender()
                         if pk:
-                            db.delete(pk, outpoint, db=ADDR_DB)
+                            db.delete(pk, outpoint, db=WALLET_DB)
 
                 for i, tx_out in enumerate(txn_obj.outputs):
                     outpoint = txn_obj.hash() + int_to_bytes(i)
@@ -360,7 +361,7 @@ def save_block(block: Block) -> bool:
 
                     pk = tx_out.script_pubkey.get_script_pubkey_receiver()
                     if pk:
-                        db.put(pk, outpoint, db=ADDR_DB)
+                        db.put(pk, outpoint, db=WALLET_DB)
         return True
     except Exception as e:
         log.exception(f"Error attempting to save block: {e}")

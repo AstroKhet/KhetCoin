@@ -8,7 +8,7 @@ MENU_CONFIG = [
     },
     {
         "name": "blockchain",
-        "options": ["view_blockchain", None, "mempool", "mining"]
+        "options": ["view_blockchain", None, "saved_addresses", "mempool", "mining"]
     },
     {
         "name": "wallet",
@@ -16,6 +16,6 @@ MENU_CONFIG = [
     },
     {
         "name": "network", 
-        "options": ["node", "manage_peers"]
+        "options": ["node", "manage_peers", None, "saved_peers"]
     },
 ]

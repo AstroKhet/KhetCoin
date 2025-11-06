@@ -102,24 +102,18 @@ class MempoolFrame(tk.Frame):
         self.lf_metadata.columnconfigure(0, weight=1, uniform="metadata")
         self.lf_metadata.columnconfigure(1, weight=1, uniform="metadata")
 
-        # 3. Update helper vars
-        self._valid_txs_snapshot = self.node.mempool.get_valid_txs()
-        self._orphan_txs_snapshot = self.node.mempool.get_orphan_txs()
-
-        # 4. Initial setup
+        # 3. Initial setup
         self._selected_tx: Transaction | None = None
         self._generate_valid_txs_treeview()
         self._generate_orphan_txs_treeview()
         self._update()
         
     def _generate_valid_txs_treeview(self):
-        new_txs = self.node.mempool.get_valid_txs()
-        existing_items = list(self.tree_valid_txs.get_children())
-        existing_count = len(existing_items)
-        new_count = len(new_txs)
+        latest_txs = self.node.mempool.get_all_valid_tx()
+        tree_valid_tx_iids = list(self.tree_valid_txs.get_children())
 
         # Update or insert rows
-        for i, tx in enumerate(new_txs):
+        for tx in latest_txs:
             tx_hash = tx.hash()
             from_ = tx.from_()
             to = tx.to()
@@ -132,26 +126,23 @@ class MempoolFrame(tk.Frame):
                 format_age(time.time() - self.node.mempool.get_tx_time(tx_hash)) + " ago"
             )
 
-            if i < existing_count:
-                iid = existing_items[i]
-                self.tree_valid_txs.item(iid, values=values)
+            if tx_hash.hex() in tree_valid_tx_iids:
+                self.tree_valid_txs.item(tx_hash.hex(), values=values)
+                tree_valid_tx_iids.remove(tx_hash.hex())
             else:
                 self.tree_valid_txs.insert("", "end", iid=tx_hash.hex(), values=values)
 
         # Remove extra old rows if new list is shorter
-        if new_count < existing_count:
-            for iid in existing_items[new_count:]:
-                self.tree_valid_txs.delete(iid)
+        for iid in tree_valid_tx_iids:
+            self.tree_valid_txs.delete(iid)
+            
 
     
     def _generate_orphan_txs_treeview(self):
-        new_txs = self.node.mempool.get_orphan_txs()
-        existing_items = list(self.tree_orphan_txs.get_children())
-        existing_count = len(existing_items)
-        new_count = len(new_txs)
+        latest_txs = self.node.mempool.get_all_orphan_tx()
+        tree_orphan_tx_iids = set(self.tree_orphan_txs.get_children())
 
-        # Update or insert rows
-        for i, tx in enumerate(new_txs):
+        for tx in latest_txs:
             tx_hash = tx.hash()
             from_ = tx.from_()
             to = tx.to()
@@ -160,27 +151,26 @@ class MempoolFrame(tk.Frame):
                 from_ if isinstance(from_, str) else truncate_bytes(from_),
                 to if isinstance(to, str) else truncate_bytes(to),
                 f"{sum(tx_out.value for tx_out in tx.outputs) / KTC:.8f} KTC",
-                f"{tx.fee() / KTC:.8f} KTC",
+                "N/A",
                 format_age(time.time() - self.node.mempool.get_tx_time(tx_hash)) + " ago"
             )
 
-            if i < existing_count:
-                iid = existing_items[i]
-                self.tree_orphan_txs.item(iid, values=values)
+            if tx_hash.hex() in tree_orphan_tx_iids:
+                self.tree_orphan_txs.item(tx_hash.hex(), values=values)
+                tree_orphan_tx_iids.remove(tx_hash.hex())
             else:
                 self.tree_orphan_txs.insert("", "end", iid=tx_hash.hex(), values=values)
 
-        # Remove extra old rows if new list is shorter
-        if new_count < existing_count:
-            for iid in existing_items[new_count:]:
-                self.tree_orphan_txs.delete(iid)
+        # Remove items that no longer exist
+        for iid in tree_orphan_tx_iids:
+            self.tree_orphan_txs.delete(iid)
     
     def _generate_metadata(self):
-        valid_txs = self.node.mempool.get_valid_txs()
+        valid_txs = self.node.mempool.get_all_valid_tx()
         no_valid_txs = len(valid_txs)
         size_valid_txs = sum(len(tx.serialize()) for tx in valid_txs)
 
-        orphan_txs = self.node.mempool.get_orphan_txs()
+        orphan_txs = self.node.mempool.get_all_orphan_tx()
         no_orphan_txs = len(orphan_txs)
         size_orphan_txs = sum(len(tx.serialize()) for tx in orphan_txs)
         
@@ -207,7 +197,6 @@ class MempoolFrame(tk.Frame):
         if not selection:
              return
         
-
         tx_hash = bytes.fromhex(selection[0])
         tx = self.node.mempool.get_valid_tx(tx_hash)
         if tx:
@@ -227,6 +216,9 @@ class MempoolFrame(tk.Frame):
 
     def _on_tx_select(self, tx, type_):
         # Copied from gui/frames/wallet/pay.py
+        """
+        type_ (str) : "orphan" | "valid"
+        """
         win_tx = tk.Toplevel(self)
         win_tx.title(f"{type_.capitalize()} Transaction")
         win_tx.geometry("600x500")
@@ -278,19 +270,28 @@ class MempoolFrame(tk.Frame):
         frame_tx_summary_left.columnconfigure(1, weight=1)
         frame_tx_summary_left.grid(row=0, column=0, sticky="nsew", padx=10)
 
-        tk.Label(frame_tx_summary_left, text="Input value:").grid(row=0, column=0, sticky="w")
-        tk.Label(frame_tx_summary_left, text=f"{tx.input_value()/KTC:.8f} KTC").grid(row=0, column=1, sticky="e")
+        if type_ == "valid":
+            tk.Label(frame_tx_summary_left, text="Input value:").grid(row=0, column=0, sticky="w")
+            tk.Label(frame_tx_summary_left, text=f"{tx.input_value()/KTC:.8f} KTC").grid(row=0, column=1, sticky="e")
+        elif type_ == "orphan":
+            tk.Label(frame_tx_summary_left, text="Input value:").grid(row=0, column=0, sticky="w")
+            tk.Label(frame_tx_summary_left, text=f"N/A").grid(row=0, column=1, sticky="e")
 
         tk.Label(frame_tx_summary_left, text="Output value:").grid(row=1, column=0, sticky="w")
-        tk.Label(frame_tx_summary_left, text=f"{tx.output_value(exclude_change=True)/KTC:.8f} KTC").grid(row=1, column=1, sticky="e")
-
-        tk.Label(frame_tx_summary_left, text="Change value:").grid(row=2, column=0, sticky="w")
-        tk.Label(frame_tx_summary_left, text=f"{tx.change_value()/KTC:.8f} KTC").grid(row=2, column=1, sticky="e")
+        tk.Label(frame_tx_summary_left, text=f"{tx.output_value(exclude_change=True)/KTC:.8f} KTC").grid(row=1, column=1, sticky="e")  
+            
+        if type_ == "valid":
+            tk.Label(frame_tx_summary_left, text="Change value:").grid(row=2, column=0, sticky="w")
+            tk.Label(frame_tx_summary_left, text=f"{tx.change_value()/KTC:.8f} KTC").grid(row=2, column=1, sticky="e")
+            
+        elif type_ == "orphan":
+            tk.Label(frame_tx_summary_left, text="Change value:").grid(row=2, column=0, sticky="w")
+            tk.Label(frame_tx_summary_left, text=f"N/A").grid(row=2, column=1, sticky="e")
 
         tx_size = len(tx.serialize())
         tk.Label(frame_tx_summary_left, text="Transaction size:").grid(row=3, column=0, sticky="w")
         tk.Label(frame_tx_summary_left, text=format_bytes(tx_size)).grid(row=3, column=1, sticky="e")
-
+            
         # Right frame (fees)
         frame_tx_summary_right = tk.Frame(lf_tx_summary)
         frame_tx_summary_right.columnconfigure(0, weight=1)
@@ -298,12 +299,19 @@ class MempoolFrame(tk.Frame):
         frame_tx_summary_right.grid(row=0, column=1, sticky="nsew", padx=10)
 
         total_fee = tx.fee()
-        tk.Label(frame_tx_summary_right, text="Total fee:").grid(row=0, column=0, sticky="w")
-        tk.Label(frame_tx_summary_right, text=f"{total_fee / KTC:.8f} KTC").grid(row=0, column=1, sticky="e")
+        if total_fee is not None:
+            tk.Label(frame_tx_summary_right, text="Total fee:").grid(row=0, column=0, sticky="w")
+            tk.Label(frame_tx_summary_right, text=f"{total_fee / KTC:.8f} KTC").grid(row=0, column=1, sticky="e")
 
-        fee_rate = total_fee / tx_size if tx_size > 0 else 0
-        tk.Label(frame_tx_summary_right, text="Fee rate:").grid(row=1, column=0, sticky="w")
-        tk.Label(frame_tx_summary_right, text=f"{fee_rate:.2f} khets/B").grid(row=1, column=1, sticky="e")
+            fee_rate = total_fee / tx_size if tx_size > 0 else 0
+            tk.Label(frame_tx_summary_right, text="Fee rate:").grid(row=1, column=0, sticky="w")
+            tk.Label(frame_tx_summary_right, text=f"{fee_rate:.2f} khets/B").grid(row=1, column=1, sticky="e")
+        else:
+            tk.Label(frame_tx_summary_right, text="Total fee:").grid(row=0, column=0, sticky="w")
+            tk.Label(frame_tx_summary_right, text=f"N/A").grid(row=0, column=1, sticky="e")
+
+            tk.Label(frame_tx_summary_right, text="Fee rate:").grid(row=1, column=0, sticky="w")
+            tk.Label(frame_tx_summary_right, text=f"N/A").grid(row=1, column=1, sticky="e")   
     
         # 2. Content for tx summary window
         if tx is None:
@@ -328,7 +336,7 @@ class MempoolFrame(tk.Frame):
                 addr = "Coinbase"
             else:
                 addr = script_sig.get_script_sig_sender() or "N/A"
-            value = tx_in.value() or 0
+            value = f"{tx_in.value()/KTC:.8f}KTC" if tx_in.value() is not None else "N/A"
 
             frame_input = tk.Frame(frame_tx_io)
             frame_input.grid(row=i, column=0, sticky="we", padx=2, pady=2)
@@ -343,7 +351,7 @@ class MempoolFrame(tk.Frame):
                     command=lambda sig=script_sig, pk=script_pk: self._show_script_window(sig, pk)
             ).grid(row=0, column=2)
 
-            tk.Label(frame_input, text=f"{value/KTC:.8f}KTC", fg="gray").grid(row=1, column=0, sticky="w")
+            tk.Label(frame_input, text=value, fg="gray").grid(row=1, column=0, sticky="w")
 
         # Outputs
         for i, tx_out in enumerate(tx.outputs, start=1):
@@ -366,8 +374,6 @@ class MempoolFrame(tk.Frame):
 
             tk.Label(frame_output, text=f"{value/KTC:.8f}KTC", fg="gray").grid(row=1, column=0, sticky="w")
         
-        btn_send = ttk.Button(win_tx, text="Send Transaction", command=self._send_tx)
-        btn_send.grid(row=2, column=0, padx=15, pady=15, sticky="e")
         bind_hierarchical("<MouseWheel>", frame_tx_scrollable, lambda e: mousewheel_cb(e, cnv_tx_summary))
     
     def _show_script_window(self, script_sig: Script | None=None, script_pubkey: Script | None=None):
@@ -375,6 +381,7 @@ class MempoolFrame(tk.Frame):
         win_script = tk.Toplevel(self)
         win_script.title(f"Script for Transaction {truncate_bytes(self._selected_tx.hash())}") # type: ignore
         win_script.geometry("300x200")
+        win_script.transient(self)
         
         frame_script = tk.Frame(win_script, padx=10, pady=10)
         frame_script.pack(fill="both", expand=True)
@@ -410,16 +417,12 @@ class MempoolFrame(tk.Frame):
             self.tree_orphan_txs.set(iid, "received", format_age(time.time() - tx_time))
 
         # Valid Transaction listening
-        valid_txs = self.node.mempool.get_valid_txs()
-        if self._valid_txs_snapshot != valid_txs:
-            self._valid_txs_snapshot = valid_txs
+        if self.node.mempool.check_update_valids():
             self._generate_valid_txs_treeview()
             self._generate_metadata()
         
         # Orphan Transaction listening
-        orphan_txs = self.node.mempool.get_orphan_txs()
-        if self._orphan_txs_snapshot != orphan_txs:
-            self._orphan_txs_snapshot = orphan_txs
+        if self.node.mempool.check_update_orphans():
             self._generate_orphan_txs_treeview()
             self._generate_metadata()
 

@@ -1,0 +1,36 @@
+blockchain/transaction.py 
+
+>> Checking if sum of inputs and outputs exceed KTC_MAX, should not happen at all
+# input_sum = 0
+# if not self.is_coinbase():
+#     for tx_in in self.inputs:
+#         input_value = tx_in.value()
+#         if input_value is None:
+#             if allow_orphan:
+#                 log.info(f"Input<{tx_in}> is an orphan. Ignoring as allow_orphan=True")
+#                 continue
+#             else:   
+#                 log.warning(f"Input<{tx_in}>: Invalid UTXO reference. Ignore by setting allow_orphan=True")
+#                 return False
+#         elif input_value > MAX_KHETS:
+#             log.warning(f"<Input<{tx_in}>: Value exceeds KTC limit")
+#             return False
+#         input_sum += input_value
+        
+#     if input_sum > MAX_KHETS:  # Should never happen
+#         log.warning(f"<TX {self.hash()}> Sum or parts of input exceed {MAX_KTC} KTC")
+#         return False
+
+
+        # 3. Checking Outputs of this Transaction
+        output_sum = 0
+        for tx_out in self.outputs:
+            output_value = tx_out.value
+            if output_value > MAX_KHETS:  # Should also never happen
+                log.warning(f"<Output<{tx_out}>: Value exceeds KTC limit")
+                return False
+            output_sum += output_value
+            
+        if output_sum > MAX_KHETS:
+            log.warning(f"<TX {self.hash()}> Sum or parts of input exceed {MAX_KTC} KTC")
+            return False

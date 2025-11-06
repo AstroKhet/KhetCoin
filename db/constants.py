@@ -1,7 +1,8 @@
 import lmdb
 import os
 
-BLOCKCHAIN_DIR = ".data/blockchain/"
+from utils.config import APP_CONFIG
+
 # BLOCKCHAIN .DAT STORAGE FORMAT
 # BEGINNING of each BLOCK
 # - Block Magic 4B (MEOW)
@@ -11,14 +12,13 @@ BLOCKCHAIN_DIR = ".data/blockchain/"
 # - Tx1, Tx2, ... Tx
 
 BLOCK_MAGIC = "MEOW".encode() # TODO shift this to a universal constants file
-os.makedirs(BLOCKCHAIN_DIR, exist_ok=True)
+os.makedirs(APP_CONFIG.get("path", "blockchain"), exist_ok=True)
 
-LMDB_DIR = ".data/lmdb/"
 MAP_SIZE = 1 << 30  # 1 GB
 DAT_SIZE = 10 * (1 << 20) # 10 MB
 
 LMDB_ENV = lmdb.open(
-    LMDB_DIR,
+    APP_CONFIG.get("path", "lmdb"),
     map_size=MAP_SIZE,
     max_dbs=10, 
 )
@@ -28,7 +28,7 @@ with LMDB_ENV.begin(write=True) as txn:
     HEIGHT_DB = LMDB_ENV.open_db(b"height", txn=txn, create=True)
     TX_DB = LMDB_ENV.open_db(b"transaction", txn=txn, create=True)
     UTXO_DB = LMDB_ENV.open_db(b"utxo", txn=txn, create=True)
-    ADDR_DB = LMDB_ENV.open_db(b"addr", txn=txn, create=True, dupsort=True)
+    WALLET_DB = LMDB_ENV.open_db(b"addr", txn=txn, create=True, dupsort=True)
 
 
 # BLOCKS
@@ -57,6 +57,6 @@ with LMDB_ENV.begin(write=True) as txn:
 # Key: Tx Hash (32L) + Index (4L)
 # Value: Full Transaction Output
 
-# ADDR (Duplicate Keys)
+# WALLET (Duplicate Keys)
 # Key: Pubkey Hash (20B)
 # Value: Tx Hash (32L) + Index (4L)

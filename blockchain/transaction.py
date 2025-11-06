@@ -2,7 +2,7 @@ import logging
 
 from typing import List, BinaryIO, Optional
 from coincurve import PrivateKey
-from db.constants import LMDB_ENV, ADDR_DB
+from db.constants import LMDB_ENV, WALLET_DB
 from ktc_constants import COINBASE_MATURITY, MAX_KHETS, KTC, MAX_KTC, MAX_BLOCK_SIZE
 
 from blockchain.constants import SIGHASH_ALL, SIGOPS_LIMIT
@@ -13,7 +13,7 @@ from crypto.hashing import *
 from db.block import get_blockchain_height, median_time_past
 from db.tx import get_txn
 
-from utils.fmt import print_bytes
+from utils.fmt import format_bytes, print_bytes
 from utils.helper import *
 
 
@@ -293,56 +293,56 @@ class Transaction:
         return script_verify.evaluate(msg_hash)
 
     def verify(self, allow_orphan: bool = False) -> bool:
+        """
+        Verifies that a transaction fits into the Khetcoin protocol
+        
+        Note: This does not check if the tx uses outputs already spent
+        """
         log.info(f"Verifying Transaction<{self.hash().hex()}>...")
+        
+        # 1. Basic Preliminary checks
         if not self.inputs or not self.outputs:
-            log.warning(f"<TX {self.hash()}> has empty input and/or output")
+            log.warning(f"Empty inputs and/or outputs")
             return False
 
-        if self.size() > MAX_BLOCK_SIZE:
-            log.warning(f"<TX {self.hash()}> Size is not less than {MAX_BLOCK_SIZE} & >= 100.")
+        if size := self.size() > MAX_BLOCK_SIZE:
+            log.warning(f"Transaction size too large: {format_bytes(size)} > {format_bytes(MAX_BLOCK_SIZE)}")
             return False
 
-        if self.fee() < 0:
-            log.warning(f"<TX {self.hash()}> Fee <= 0")
+        if self.fee() is None:
+            if allow_orphan: 
+                pass
+            else:
+                log.warning(f"Error calculating fee")
+                return False
+        elif self.fee() < 0:
+            log.warning("Fee <= 0")
             return False
 
-        input_sum = 0
+        # 2. Checking Inputs of this Transaction
+        #   a) For inputs referencing valid outpoints, their combined script should be valid.
+        #   b) No double spending within a transaction. That is, we can't have two inputs pointing to the same outpoint
         if not self.is_coinbase():
-            # Checking inputs
-            for tx_in in self.inputs:
-                input_value = tx_in.value()
-                # TODO: Orphan TXN
-                if input_value is None:
+            output_seen: set[tuple[bytes, int]] = set()
+            for i, input in enumerate(self.inputs):
+                if input.value() is None:
                     if allow_orphan:
-                        log.info(f"Input<{tx_in}> is an orphan. Ignoring as allow_orphan=True")
+                        log.info(f"Unable to find referenced UTXO for Input[{i}]; Orphan transaction")
                         continue
-                    else:   
-                        log.warning(f"Input<{tx_in}>: Invalid UTXO reference. Ignore by setting allow_orphan=True")
-                        return False
-
-                if input_value > MAX_KHETS:
-                    log.warning(f"<Input<{tx_in}>: Value exceeds KTC limit")
+                    
+                elif not self.verify_input(i): 
+                    log.warning(f"Input[{i}] failed to verify.")
                     return False
+                
+                outpoint = (input.prev_tx_hash, input.prev_index)
+                if outpoint in output_seen:
+                    log.warning(f"Double spend detected at Input[{i}]")
+                    return False
+ 
+                output_seen.add(outpoint)
 
-                input_sum += input_value
-            if input_sum > MAX_KHETS:
-                log.warning(f"<TX {self.hash()}> Sum or parts of input exceed {MAX_KTC} KTC")
-                return False
-
-        output_sum = 0
-        for tx_out in self.outputs:
-            output_value = tx_out.value
-
-            if output_value > MAX_KHETS:
-                log.warning(f"<Output<{tx_out}>: Value exceeds KTC limit")
-                return False
-
-            output_sum += output_value
-        if output_sum > MAX_KHETS:
-            log.warning(f"<TX {self.hash()}> Sum or parts of input exceed {MAX_KTC} KTC")
-            return False
-
-        if self.locktime == 0:  # Txn is immediately spendable
+        # 3. Locktime checks (see https://en.bitcoin.it/wiki/NLockTime)
+        if self.locktime == 0:  # Tx is immediately spendable
             pass
         elif self.locktime < 500_000_000:  # locktime is the least height requried before tx is spendable
             if self.locktime > get_blockchain_height():
@@ -353,34 +353,7 @@ class Transaction:
                 log.warning(f"<TX {self.hash()}> MTP too early. Transaction locked.")
                 return False
 
-        # Ensuring that all inputs come from a valid UTXO
-        if not self.is_coinbase():
-            output_seen: set[tuple[bytes, int]] = set()  # Double spend checking
-            for i, input in enumerate(self.inputs):
-                prev_tx_hash = input.prev_tx_hash
-                prev_id = input.prev_index
-                outpoint = (prev_tx_hash, prev_id)
-
-                if outpoint in output_seen:
-                    log.warning(f"Double spend detected at Input[{i}]")
-                    return False
-
-                else:
-                    output_seen.add(outpoint)
-                if not self.verify_input(i): 
-                    log.warning(f"<TX {self.hash()}> Input[{i}] failed to verify.")
-                    return False
-
-                # if prev_tx := input.fetch_tx():
-                #     if prev_tx.is_coinbase() and get_blockchain_height() < prev_tx.coinbase_height() + COINBASE_MATURITY:
-                #         log.warning(f"<TX {self.hash()}> Input[{i}] uses a coinbase txn that has not matured yet.")
-                #         return False
-
-                # else:  # Orphan TXN
-                #     log.warning(f"<TX {self.hash()}> Input[{i}] does not reference a valid txn_hash. Discarding.")
-                #     # Discarded, but possible to cache in orphan pool
-                #     return False
-
+        # Transaction Verified
         return True
 
     def is_coinbase(self) -> bool:
@@ -396,14 +369,14 @@ class Transaction:
 
         return True
 
-    def coinbase_height(self) -> int:
+    def coinbase_height(self) -> int | None:
         if not self.is_coinbase():
             log.exception(f"<TX {self.hash()}> No coinbase height for non coinbase txn")
-            return -1
+            return None
 
         if self.inputs[0].script_sig.sigops > 0:
             log.exception(f"<TX {self.hash()}> Invalid coinbase txn: scriptSig must have 0 SIGOPS")
-            return -1
+            return None
         else:
             height = bytes_to_int(self.inputs[0].script_sig.commands[0]) # type: ignore
         return height       
@@ -412,24 +385,24 @@ class Transaction:
         tx_hash = HASH256(self.serialize())
         return tx_hash
 
-    def fee(self) -> int:
+    def fee(self) -> int | None:
         if self.is_coinbase():
             return 0
 
         input_value = self.input_value()
         if not input_value:
-            return -1
+            return None
         output_value = self.output_value()
         return  input_value - output_value # should be >0
 
-    def input_value(self):
+    def input_value(self) -> int | None:
         val = 0
-        for inp in self.inputs:
-            if value := inp.value():
+        for i, inp in enumerate(self.inputs):
+            value = inp.value()
+            if value is not None:
                 val += value
             else:
-                log.warning(f"Input {inp} refering to non-existent UTXO")
-                return 0
+                return None
         return val
     
     def output_value(self, exclude_change=False):
@@ -485,14 +458,14 @@ class Transaction:
 
 # Auxillary UTXO functionality for wallet
 def save_utxo_addr(addr: bytes, tx_hash: bytes, index: int):
-    with LMDB_ENV.begin(db=ADDR_DB) as db:
+    with LMDB_ENV.begin(db=WALLET_DB) as db:
         outpoint = tx_hash + int_to_bytes(index)
         db.put(addr, outpoint)
 
 
 def get_utxo_addr(addr: bytes) -> list[tuple]:
     utxos = []
-    with LMDB_ENV.begin(db=ADDR_DB) as db:
+    with LMDB_ENV.begin(db=WALLET_DB) as db:
         cursor = db.cursor()
         if cursor.set_key(addr):
             for outpoint in cursor.iternext_dup():
@@ -513,7 +486,7 @@ def get_utxo_addr_value(addr: bytes) -> int:
 
 
 def delete_utxo_addr(addr: bytes, tx_hash: bytes, index: int):
-    with LMDB_ENV.begin(db=ADDR_DB) as db:
+    with LMDB_ENV.begin(db=WALLET_DB) as db:
         outpoint = tx_hash + int_to_bytes(index)
         db.delete(addr, outpoint)
 
@@ -522,7 +495,7 @@ def count_utxo_addr(addr: bytes | None = None) -> int:
     """
     Counts UTXOs associated with addr if set, otherwise returns size of entire UTXO set
     """
-    with LMDB_ENV.begin(db=ADDR_DB) as txn:
+    with LMDB_ENV.begin(db=WALLET_DB) as txn:
         cursor = txn.cursor()
         if addr is None:
             stat = txn.stat()

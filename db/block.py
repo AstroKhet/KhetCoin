@@ -4,6 +4,7 @@ from io import BytesIO
 from dataclasses import dataclass
 from db.constants import *
 from utils.helper import encode_varint, bytes_to_int, read_varint
+from utils.config import APP_CONFIG
 
 import os
 
@@ -30,7 +31,7 @@ def get_blk_dat_no():
     # blk{8 digit number}.dat
     return max(
         int(filename[3:11])
-        for filename in os.listdir(BLOCKCHAIN_DIR)
+        for filename in os.listdir(APP_CONFIG.get("path", "blockchain"))
         if filename.endswith(".dat")
     )
 
@@ -79,7 +80,7 @@ def get_block(block_hash: bytes, full: bool = False) -> bytes | None:
         dat_file_no = bytes_to_int(value[:4])
         offset = bytes_to_int(value[4:8])
 
-        dat_file = os.path.join(BLOCKCHAIN_DIR, f"blk{dat_file_no:08}.dat")
+        dat_file = os.path.join(APP_CONFIG.get("path", "blockchain"), f"blk{dat_file_no:08}.dat")
         stream = open(dat_file, "rb")
         stream.seek(offset)
 

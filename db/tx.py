@@ -4,8 +4,9 @@ from io import BytesIO
 
 from dataclasses import dataclass
 from db.block import get_block_hash_at_height, get_block_metadata, get_block_timestamp
-from db.constants import BLOCKCHAIN_DIR, LMDB_ENV, TX_DB
+from db.constants import LMDB_ENV, TX_DB
 from utils.helper import bytes_to_int, read_varint
+from utils.config import APP_CONFIG
 
 @dataclass
 class TransactionMetadata:
@@ -19,7 +20,9 @@ class TransactionMetadata:
     
     
 def get_txn(tx_hash: bytes) -> bytes |  None:
-    # 32B LE tx hash
+    """
+    Returns the full serialized transaction corresponding to `tx_hash`
+    """
     with LMDB_ENV.begin(db=TX_DB) as db:
         value = db.get(tx_hash)
 
@@ -30,7 +33,7 @@ def get_txn(tx_hash: bytes) -> bytes |  None:
         offset = bytes_to_int(value[4:8])
         tx_size = bytes_to_int(value[8:12])
 
-        dat_file = os.path.join(BLOCKCHAIN_DIR, f"blk{dat_file_no:08}.dat")
+        dat_file = os.path.join(APP_CONFIG.get("path", "blockchain"), f"blk{dat_file_no:08}.dat")
         stream = open(dat_file, 'rb')
         stream.seek(offset)
     
@@ -76,6 +79,6 @@ def get_txn_timestamp(tx_hash: bytes) -> int | None:
 # together as a block on the blockchain (save_block), otherwise it stays in the mempool.
 
 def get_tx_exists(tx_hash: bytes) -> bool:
-    with LMDB_ENV.open(db=TX_DB) as db:
+    with LMDB_ENV.begin(db=TX_DB) as db:
         return db.get(tx_hash) is not None
 

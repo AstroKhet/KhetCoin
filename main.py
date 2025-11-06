@@ -2,14 +2,13 @@ from gui.main_window import KhetcoinApp
 from networking.node import Node
 from utils.setup import RUNTIME_SETUP
 
-node_kwargs = {"name": "EFD", "host": "127.0.0.1", "port": 8888}
+node_kwargs = {"name": "Khet", "host": "127.0.0.1", "port": 8888}
 
 
 def main():
     RUNTIME_SETUP()
     
-    node = Node(**node_kwargs)
-    app = KhetcoinApp(node)
+    app = KhetcoinApp(**node_kwargs)
 
     app.main()
 

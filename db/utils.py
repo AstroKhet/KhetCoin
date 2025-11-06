@@ -1,10 +1,10 @@
 from io import BytesIO
 import os
 
-from db.constants import BLOCKCHAIN_DIR, LMDB_ENV, BLOCKS_DB, HEIGHT_DB, TX_DB, ADDR_DB, UTXO_DB
+from db.constants import LMDB_ENV, BLOCKS_DB, HEIGHT_DB, TX_DB, WALLET_DB, UTXO_DB
 from utils.fmt import print_bytes, truncate_bytes
 from utils.helper import bytes_to_int, read_varint  # assuming your helpers are here too
-
+from utils.config import APP_CONFIG
 
 ## DELETE IN PRODUCTION
 
@@ -13,7 +13,7 @@ def clear_all_dbs():
         txn.drop(BLOCKS_DB, delete=False)
         txn.drop(HEIGHT_DB, delete=False)
         txn.drop(TX_DB, delete=False)
-        txn.drop(ADDR_DB, delete=False)
+        txn.drop(WALLET_DB, delete=False)
         txn.drop(UTXO_DB, delete=False)
     print("All LMDB databases cleared.")
 
@@ -24,7 +24,7 @@ def print_lmdb():
         "HEIGHT_DB": HEIGHT_DB,
         "TX_DB": TX_DB,
         "UTXO_DB": UTXO_DB,
-        "ADDR_DB": ADDR_DB
+        "ADDR_DB": WALLET_DB
     }
 
     for name, db in dbs.items():
@@ -97,7 +97,7 @@ def print_lmdb():
 
 
 def print_dat(n, start, end=-1):
-    dat_file = os.path.join(BLOCKCHAIN_DIR, f"blk{n:08}.dat")
+    dat_file = os.path.join(APP_CONFIG.get("path", "blockchain"), f"blk{n:08}.dat")
 
     with open(dat_file, "rb") as dat:
         dat.seek(start)

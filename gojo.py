@@ -9,8 +9,7 @@ node_kwargs = {
 }
 
 def main():
-    node = Node(**node_kwargs)
-    app = KhetcoinApp(node)
+    app = KhetcoinApp(**node_kwargs)
     
     app.main()
     

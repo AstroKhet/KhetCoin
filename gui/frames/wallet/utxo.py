@@ -33,15 +33,14 @@ class UTXOFrame(tk.Frame):
         self.frame_sort = tk.Frame(self)
         self.frame_sort.pack(fill="x", padx=10, pady=5)
         
-        self.label_sort_by = tk.Label(self.frame_sort, text="Sort By:")
-        self.label_sort_by.pack(side="left", padx=(0, 5))
+        tk.Label(self.frame_sort, text="Sort By:").pack(side="left", padx=(0, 5))
 
         self.sort_by_var = tk.StringVar(value="Value")
         self.om_sort_by = ttk.OptionMenu(self.frame_sort, self.sort_by_var, "Value", "Value", "Time", command=self._sort_utxo)
         self.om_sort_by.pack(side="left", padx=5)
 
-        self.sort_order_var = tk.StringVar(value="Descending")
-        self.om_sort_order = ttk.OptionMenu(self.frame_sort, self.sort_order_var, "Descending", "Descending", "Ascending", command=self._sort_utxo)
+        self.sort_order_var = tk.StringVar(value="Ascending")
+        self.om_sort_order = ttk.OptionMenu(self.frame_sort, self.sort_order_var, "Ascending", "Ascending", "Descending", command=self._sort_utxo)
         self.om_sort_order.pack(side="left", padx=5)
 
         self.frame_utxos = tk.Frame(self)

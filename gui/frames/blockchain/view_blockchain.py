@@ -711,10 +711,12 @@ class ViewBlockchainFrame(tk.Frame):
 
     
     def _show_script_window(self, script_sig: Script | None=None, script_pubkey: Script | None=None):
-        win_script = tk.Toplevel(self.lf_tx_details)
+        win_script = tk.Toplevel(self)
         win_script.title(f"Script for Transaction {truncate_bytes(self._selected_tx.hash())}") # type: ignore
         win_script.geometry("300x200")
         
+        win_script.transient(self) 
+ 
         frame_script = tk.Frame(win_script, padx=10, pady=10)
         frame_script.pack(fill="both", expand=True)
 

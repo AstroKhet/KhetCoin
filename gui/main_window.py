@@ -18,15 +18,15 @@ class KhetcoinApp:
     Main Interface for Khetcoin
     - Controls both the GUI and Node event loops
     """
-    def __init__(self, node: Node):
-        self.node = node
-
+    def __init__(self, **node_kwargs):
         self.node_loop = asyncio.new_event_loop()
         self.node_thread = threading.Thread(target=self._run_node_loop, daemon=True)
         self.node_thread.start()
+        
+        self.node = Node(**node_kwargs, loop=self.node_loop)
 
         self.root = tk.Tk()
-        self.root.title(f"{node.name}'s Node")
+        self.root.title(f"{self.node.name}'s Node")
         self.root.geometry("800x600")
         self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
 
@@ -35,7 +35,7 @@ class KhetcoinApp:
         self.view_container.grid_rowconfigure(0, weight=1)
         self.view_container.grid_columnconfigure(0, weight=1)
 
-        dashboard = FRAMES_CONFIG["dashboard"](parent=self.view_container, controller=self, node=node)
+        dashboard = FRAMES_CONFIG["dashboard"](parent=self.view_container, controller=self, node=self.node)
         dashboard.grid(row=0, column=0, sticky="nsew")
         self.frames = {"dashboard": dashboard}
 
@@ -52,15 +52,10 @@ class KhetcoinApp:
 
     def start_node(self):
         """Starts the node's run method in the node's event loop."""
-        # Check if the node's run task is already active to prevent multiple starts
-        # A simple way is to check if the node's server is running or if there's an active run task
         if self.node.server is not None:
-            print("Node is already running.")
+            log.info("Node is already running.")
             return
 
-        print("Requesting node start...")
-        # Submit the node.run() coroutine to the node's event loop
-        # This will start the server and other node tasks within the node_loop
         asyncio.run_coroutine_threadsafe(self.node.run(), self.node_loop)
         print("Node start requested.")  # Added for debugging
 

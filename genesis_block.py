@@ -2,6 +2,7 @@ from db.constants import *
 from db.utils import print_dat, print_lmdb
 from utils.helper import *
 from utils.fmt import *
+from utils.config import APP_CONFIG
 
 from blockchain.block import *
 from blockchain.merkle_tree import *
@@ -84,7 +85,7 @@ if __name__ == "__main__":
 
     print("Saving Genesis Block...")
     dat_file_no = 0
-    dat_file = os.path.join(BLOCKCHAIN_DIR, f"blk{dat_file_no:08}.dat")
+    dat_file = os.path.join(APP_CONFIG.get("path", "blockchain"), f"blk{dat_file_no:08}.dat")
     if not os.path.exists(dat_file):
         open(dat_file, "wb").close()
 
@@ -130,7 +131,7 @@ if __name__ == "__main__":
 
             key = HASH160(get_public_key("EFD", raw=True))  # Khet's P2PKH 20B Address
             value = tx_hash + int_to_bytes(0) # Outpoint
-            db.put(key, value, db=ADDR_DB)
+            db.put(key, value, db=WALLET_DB)
             print("Addr db saved")
             
             key = coinbase_tx.hash() + int_to_bytes(0)

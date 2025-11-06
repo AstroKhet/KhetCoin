@@ -14,9 +14,6 @@ class GetDataMessage:
         for inv_type, inv_hash in inventory:
             self.payload += int_to_bytes(inv_type, 4) + inv_hash
 
-        self.length = len(self.payload)
-        self.checksum = HASH256(self.payload)[:4]
-
     def __str__(self):
         lines = [f"[getdata]"]
         for i, (inv_type, inv_hash) in enumerate(self.inventory):

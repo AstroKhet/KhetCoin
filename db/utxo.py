@@ -6,8 +6,7 @@ from dataclasses import dataclass
 
 from blockchain.script import Script
 from blockchain.transaction import TransactionOutput
-from db.block import get_block_timestamp
-from db.constants import ADDR_DB, LMDB_ENV, UTXO_DB
+from db.constants import WALLET_DB, LMDB_ENV, UTXO_DB
 from db.tx import get_txn_timestamp
 from utils.helper import bytes_to_int
 
@@ -32,9 +31,12 @@ def get_utxo(outpoint: bytes) -> TransactionOutput | None:
 
 
 def get_utxo_set(addr: bytes) -> list[UTXO]:
+    """
+    Retrieves all UTXOs that pay to `addr`
+    """
     # TODO: UTXO set caching
     utxo_set = []
-    with LMDB_ENV.begin(db=ADDR_DB) as db:
+    with LMDB_ENV.begin(db=WALLET_DB) as db:
         cur = db.cursor()
         if cur.set_key(addr):   # position at key
             for op in cur.iternext_dup():
@@ -57,7 +59,10 @@ def get_utxo_set(addr: bytes) -> list[UTXO]:
         return utxo_set
     
 def get_utxo_count(addr: bytes) -> int:
-    with LMDB_ENV.begin(db=ADDR_DB) as db:
+    """
+    Retrieves no. of UTXOs that pay to `addr`
+    """
+    with LMDB_ENV.begin(db=WALLET_DB) as db:
         cursor = db.cursor()
         if cursor.set_key(addr):
             return cursor.count()
