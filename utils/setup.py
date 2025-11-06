@@ -22,7 +22,7 @@ def INITIAL_SETUP():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT,
                 address TEXT,
-                epoch_added INTEGER,
+                added INTEGER
             );""")
         con.commit()
     
@@ -35,7 +35,7 @@ def INITIAL_SETUP():
                 name TEXT,
                 address TEXT,
                 user_agent TEXT,
-                ban_score INTEGER,
+                ban_score INTEGER
             );""")
         con.commit()
         
