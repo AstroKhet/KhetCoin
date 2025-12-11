@@ -1,3 +1,8 @@
+"""
+Networking constants for supporting the Khetcoin P2P protocol. 
+These should neither be configurable nor seen by the user normally.
+"""
+
 ####################################
 NETWORK_MAGIC = "BITE".encode()  # 42 49 54 45
 NETWORK_PORT = 8888

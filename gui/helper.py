@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import messagebox
 
 def reset_widget(widget):
     for child in widget.winfo_children():
@@ -16,7 +17,7 @@ def attach_tooltip(widget, text, delay=150):
         tw = tk.Toplevel(widget)
         tw.wm_overrideredirect(True)
         x = widget.winfo_rootx() + 10
-        y = widget.winfo_rooty() + 20
+        y = widget.winfo_rooty() + 30
         tw.wm_geometry(f"+{x}+{y}")
         lbl = tk.Label(tw, text=text, relief="solid", borderwidth=1, padx=4, pady=2)
         lbl.pack()
@@ -44,21 +45,33 @@ def attach_tooltip(widget, text, delay=150):
 def copy_to_clipboard(widget, text: str):
     widget.clipboard_clear()
     widget.clipboard_append(text)
+    messagebox.showinfo(title="Text copied!", message=f"Copied\n\"{text}\"to clipboard.")
 
+def center_popup(parent, win):
+    win.update_idletasks()
+    
+    parent_x = parent.winfo_rootx()
+    parent_y = parent.winfo_rooty()
+    parent_w = parent.winfo_width()
+    parent_h = parent.winfo_height()
 
-def display_error_window(widget, title: str, err: str, info: str = ""):
-    """ 
-    (Currently) a simple error reporting GUI
-    """
-    win = tk.Toplevel(widget)
-    win.title(title)
-    win.geometry("500x360")
-    win.transient(widget)
-    win.grab_set()
+    win_w = win.winfo_reqwidth()
+    win_h = win.winfo_reqheight()
+
+    # Calculate centered position
+    x = parent_x + (parent_w // 2) - (win_w // 2)
+    y = parent_y + (parent_h // 2) - (win_h // 2)
+
+    win.geometry(f"+{x}+{y}")
     
-    tk.Label(win, text=err, fg="red", font=('Arial', 12)).pack()
     
-    if info:
-        tk.Label(win, text=info).pack()
-        
-    tk.Label(win, text="Close this window to continue.", font=('Arial', 7)).pack()
+def add_hover_effect(btn, normal_bg, hover_bg):
+
+    def on_enter(e):
+        btn.configure(bg=hover_bg, activebackground=hover_bg)
+
+    def on_leave(e):
+        btn.configure(bg=normal_bg, activebackground=normal_bg)
+
+    btn.bind("<Enter>", on_enter)
+    btn.bind("<Leave>", on_leave)

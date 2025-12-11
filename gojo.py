@@ -1,5 +1,5 @@
 from gui.main_window import KhetcoinApp
-from networking.node import Node
+from utils.setup import RUNTIME_SETUP
 
 
 node_kwargs = {
@@ -9,6 +9,7 @@ node_kwargs = {
 }
 
 def main():
+    RUNTIME_SETUP("gojo")
     app = KhetcoinApp(**node_kwargs)
     
     app.main()

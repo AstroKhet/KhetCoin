@@ -1,9 +1,0 @@
-Now, just a basic blockchain with p2p capabilities
-- only sighash all
-- only p2pkh, maybe add p2sh if got time
-- no bloom filters
-- all nodes are full nodes because i will only make full node capabilities
-- Standardize comments and docstrings to hide AI traces lol
-
-- STANDARIZE TO py >= 3.10
-- Standardize type hinting syntax

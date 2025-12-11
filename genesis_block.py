@@ -12,7 +12,7 @@ from blockchain.script import *
 from crypto.key import *
 from crypto.mining import *
 
-from ktc_constants import MIN_BITS
+from ktc_constants import MAX_BITS
 
 # Create Genesis Block and insert into database
 # Genesis Block will use P2PKH, but P2SH will be supported as well
@@ -56,9 +56,9 @@ coinbase_tx = Transaction(
 unmined_genesis_block = Block(
     version=1,
     prev_block=bytes.fromhex("00" * 32),
-    merkle_root=MerkleTree([coinbase_tx.hash()]).get_merkle_root(),
+    merkle_root=MerkleTree([coinbase_tx.hash()]).root(),
     timestamp=int(time.time()),
-    bits=MIN_BITS,  # LOWEST_BITS,
+    bits=MAX_BITS,  # LOWEST_BITS,
     nonce=0,
     tx_hashes=[coinbase_tx.hash()],
 )
@@ -105,7 +105,7 @@ if __name__ == "__main__":
                 + int_to_bytes(0)  # offset
                 + int_to_bytes(len(full_block))  # BlockSize
                 + header[68:72]  # Timestamp
-                + int_to_bytes(1)  # No. Txns
+                + int_to_bytes(1)  # No. txs
                 + int_to_bytes(coinbase_tx_output.value, 8)  # Total sent
                 + int_to_bytes(0, 8)  # Fee
                 + encode_varint(0) # Height
@@ -131,7 +131,7 @@ if __name__ == "__main__":
 
             key = HASH160(get_public_key("EFD", raw=True))  # Khet's P2PKH 20B Address
             value = tx_hash + int_to_bytes(0) # Outpoint
-            db.put(key, value, db=WALLET_DB)
+            db.put(key, value, db=ADDR_DB)
             print("Addr db saved")
             
             key = coinbase_tx.hash() + int_to_bytes(0)

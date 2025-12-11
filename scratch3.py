@@ -11,7 +11,7 @@ from blockchain.script import *
 from crypto.key import *
 from crypto.mining import *
 
-from ktc_constants import MIN_BITS
+from ktc_constants import MAX_BITS
 
 
 height = get_blockchain_height() + 1
@@ -41,9 +41,9 @@ coinbase_tx = Transaction(
 unmined_block = Block(
     version=1,
     prev_block=get_block_hash_at_height(height - 1), # type: ignore
-    merkle_root=MerkleTree([coinbase_tx.hash()]).get_merkle_root(),
+    merkle_root=MerkleTree([coinbase_tx.hash()]).root(),
     timestamp=int(time.time()),
-    bits=MIN_BITS,  # LOWEST_BITS,
+    bits=MAX_BITS,  # LOWEST_BITS,
     nonce=0,
     tx_hashes=[coinbase_tx.hash()],
     transactions=[coinbase_tx],

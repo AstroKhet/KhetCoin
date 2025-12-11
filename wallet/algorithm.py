@@ -2,9 +2,9 @@
 
 
 from blockchain.transaction import Transaction
-from db.utxo import UTXO
+from db.addr import UTXO
 from ktc_constants import MAX_BLOCK_SIZE
-from mining.constants import MIN_RELAY_TX_FEE
+from mining.constants import MIN_RELAY_TX_FEE_RATE
 from wallet.constants import MIN_CHANGE
 
 
@@ -67,9 +67,7 @@ def select_utxos(utxo_set: list[UTXO], target, use_min_change = True) -> list[UT
     for s_utxo in smaller:
         total += s_utxo.value
         selected.append(s_utxo)
-        if total == target:
-            return min_change
-        elif total >= target + min_change:
+        if (total == target) or (total >= target + min_change):
             return selected
     
     # 1.6 In the rare case where total_small + largest utxo != target and < target + min_change
@@ -77,12 +75,13 @@ def select_utxos(utxo_set: list[UTXO], target, use_min_change = True) -> list[UT
         
 
 def get_recommended_fee_rate(mempool: list[Transaction], wait_block = 1) -> int:
-    mempool.sort(key = lambda txn: txn.fee() / txn.size(), reverse=True)
+    """Returns fee in khet/KB"""
+    mempool.sort(key = lambda tx: tx.fee() / tx.size(), reverse=True)
     
     size = 0
-    for txn in mempool:
-        size += txn.size()
+    for tx in mempool:
+        size += tx.size()
         if size > wait_block * MAX_BLOCK_SIZE:
-            return round(txn.fee() / txn.size())
+            return round(tx.fee() / tx.size())
     else:
-        return MIN_RELAY_TX_FEE
+        return MIN_RELAY_TX_FEE_RATE

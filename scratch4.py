@@ -1,19 +1,37 @@
+import os
+import time
+from coincurve import PrivateKey
+from blockchain.constants import SIGHASH_ALL
 from blockchain.transaction import Transaction
-from crypto.hashing import HASH160
+from crypto.hashing import HASH160, HASH256
 from crypto.key import create_private_key, get_private_key, get_public_key, save_private_key, wif_encode, wif_decode
+from db.block import calculate_block_target, get_blockchain_height
 from db.constants import LMDB_ENV
-from db.tx import get_txn
+from db.tx import get_tx
+from ktc_constants import MAX_BITS
+from utils.config import APP_CONFIG
+from utils.helper import bits_to_target, int_to_bytes, target_to_bits
 from wallet.algorithm import get_recommended_fee_rate
 
 
-# efd = create_private_key()
-# save_private_key(efd, "EFD")
+from multiprocessing import Event, Value
 
-# tx = get_txn(bytes.fromhex("314cc4727aedb49c7c0f1272dadcfbc0242256c6d90b84cc4bb959ea62fda162"))
-# tx =  Transaction.parse_static(tx)
-# print(len(tx.outputs[0].serialize()))
+from coincurve import PrivateKey, GLOBAL_CONTEXT
+from coincurve._libsecp256k1 import lib, ffi
+from crypto.key import get_private_key
 
+a = get_private_key("Khet", raw=False)
 
-from utils.setup import INITIAL_SETUP
-import os
-print(os.path.join(".local", "addresses.db"))
+count = {68:0, 69: 0, 70: 0, 71: 0}
+for i in range(100):
+    msg = int_to_bytes(i + 123987123)
+    s = a.sign(msg, hasher=HASH256)
+    
+    sig = ffi.new('secp256k1_ecdsa_signature *')
+
+    sig_parsed = lib.secp256k1_ecdsa_signature_parse_der(GLOBAL_CONTEXT.ctx, sig, s, len(s))
+    print(sig_parsed)
+    count[len(s)] += 1
+    
+
+print(count)

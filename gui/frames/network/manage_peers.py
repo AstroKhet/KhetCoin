@@ -1,15 +1,19 @@
 import logging
+import sqlite3
+import time
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 
 from datetime import timedelta
 from gui.bindings import bind_hierarchical, mousewheel_cb
 
-from gui.helper import display_error_window
+from gui.frames.common.scrollable import create_scrollable_frame, create_scrollable_treeview
+from gui.helper import center_popup
 from networking.node import Node
 from networking.peer import Peer
 
-from utils.fmt import format_bytes
+from utils.config import APP_CONFIG
+from utils.fmt import format_age, format_bytes
 
 log = logging.getLogger(__name__)
 # TODO Save peers into peers.json
@@ -26,20 +30,20 @@ class ManagePeersFrame(tk.Frame):
         self.labels_peer_details = {}
 
         # 0. Main layout: Left panel and (initially hidden) Right details panel
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)  # Left panel takes more space initially
-        self.grid_columnconfigure(1, weight=0)  # Right panel
+        self.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)  # Left panel takes more space initially
+        self.columnconfigure(1, weight=0)  # Right panel
 
         self.frame_main = ttk.Frame(self, padding="5")
         self.frame_main.grid(row=0, column=0, sticky="nsew")
-        self.frame_main.grid_rowconfigure(0, weight=0)  # Top-left info area
-        self.frame_main.grid_rowconfigure(1, weight=1)  # Bottom-left peer list area
-        self.frame_main.grid_columnconfigure(0, weight=1)
+        self.frame_main.rowconfigure(0, weight=0)  # Top-left info area
+        self.frame_main.rowconfigure(1, weight=1)  # Bottom-left peer list area
+        self.frame_main.columnconfigure(0, weight=1)
 
         # 1.1 Top-Left: Basic Info Area
         self.lf_info_area = ttk.LabelFrame(self.frame_main, text="Network Info", padding="5")
         self.lf_info_area.grid(row=0, column=0, sticky="new", pady=(0, 5))
-        self.lf_info_area.grid_columnconfigure(1, weight=1)
+        self.lf_info_area.columnconfigure(1, weight=1)
 
         self.label_connected_peers = ttk.Label(self.lf_info_area, text="Connected Peers: 0")
         self.label_connected_peers.grid(row=0, column=0, sticky="w", padx=5, pady=2)
@@ -56,68 +60,31 @@ class ManagePeersFrame(tk.Frame):
             "id": ("Peer ID", 30),
             "name": ("Name", 100),
             "address": ("Address", 150),
-            "user_agent": ("User Agent", 150),
-            "direction": ("Direction", 80),
-            "ping": ("Ping (ms)", 80),
+            "user_agent": ("User Agent", 80),
+            "direction": ("Direction", 60),
+            "connection_time": ("Connection Time", 80),
+            "ping": ("Ping (ms)", 50),
         }
 
         self.lf_peers = ttk.LabelFrame(self.frame_main, text="Connected Peers", padding="5")
         self.lf_peers.grid(row=1, column=0, sticky="nsew")
-        self.lf_peers.grid_rowconfigure(0, weight=1)
-        self.lf_peers.grid_columnconfigure(0, weight=1)
+        self.lf_peers.rowconfigure(0, weight=1)
+        self.lf_peers.columnconfigure(0, weight=1)
 
-        self.tree_peers = ttk.Treeview(
-            self.lf_peers,
-            columns=list(peer_list_cols.keys()),
-            show="headings",
-            selectmode="browse",
-        )
-
-        for col_id, (text, width) in peer_list_cols.items():
-            self.tree_peers.heading(col_id, text=text)
-            self.tree_peers.column(col_id, width=width, minwidth=50, stretch=True)
-
-        vsb_peers = ttk.Scrollbar(self.lf_peers, orient="vertical", command=self.tree_peers.yview)
-        hsb_peers = ttk.Scrollbar(self.lf_peers, orient="horizontal", command=self.tree_peers.xview)
-        self.tree_peers.configure(yscrollcommand=vsb_peers.set, xscrollcommand=hsb_peers.set)
-
-        self.tree_peers.grid(row=0, column=0, sticky="nsew")
-        vsb_peers.grid(row=0, column=1, sticky="ns")
-        hsb_peers.grid(row=1, column=0, sticky="ew")
-
+        self.tree_peers = create_scrollable_treeview(self.lf_peers, peer_list_cols, (0, 0))
         self.tree_peers.bind("<<TreeviewSelect>>", self._on_peer_select)
 
         # 2. RIGHT panel (peer details, hidden initially)
-        self.frame_details = ttk.LabelFrame(self, text="Peer Info")
-        self.frame_details.grid(row=0, column=1, sticky="nsew")
+        self.lf_details = ttk.LabelFrame(self, text="Peer Info")
+        self.lf_details.grid(row=0, column=1, sticky="nsew")
 
-        self.frame_details.grid_rowconfigure(0, weight=1)
-        self.frame_details.grid_columnconfigure(0, weight=1)
+        self.lf_details.rowconfigure(0, weight=1)
+        self.lf_details.columnconfigure(0, weight=1)
 
-        self.cnv_peer_details = tk.Canvas(self.frame_details, borderwidth=0, highlightthickness=0)
-        self.cnv_peer_details.grid(row=0, column=0, sticky="nsew")
+        frame_details, cnv_details = create_scrollable_frame(self.lf_details, xscroll=False)
 
-        self.vsb_peer_details = ttk.Scrollbar(self.frame_details, orient="vertical", command=self.cnv_peer_details.yview)
-        self.hsb_peer_details = ttk.Scrollbar(self.frame_details, orient="horizontal", command=self.cnv_peer_details.xview)
-
-        self.vsb_peer_details.grid(row=0, column=1, sticky="ns") 
-        self.hsb_peer_details.grid(row=1, column=0, columnspan=2, sticky="ew")
-
-        self.cnv_peer_details.configure(
-            yscrollcommand=self.vsb_peer_details.set,
-            xscrollcommand=self.hsb_peer_details.set
-        )
-
-        self.lf_peer_details = ttk.LabelFrame(self.cnv_peer_details, text="Peer Details", padding="10")
-        self.cnv_peer_details.create_window((0, 0), window=self.lf_peer_details, anchor="nw")
-
-        self.frame_details_content = ttk.Frame(self.lf_peer_details, padding="5")
-        self.frame_details_content.pack(expand=True, fill="both") 
-
-        self.lf_peer_details.bind(
-            "<Configure>",
-            lambda _: self.cnv_peer_details.configure(scrollregion=self.cnv_peer_details.bbox("all"))
-        )
+        frame_details_content = ttk.Frame(frame_details, padding="5")
+        frame_details_content.pack(expand=True, fill="both") 
 
         detail_fields = [
             "Name", "Direction", "Peer ID", "Address", "User Agent",
@@ -130,22 +97,24 @@ class ManagePeersFrame(tk.Frame):
         ]
 
         for i, field_name in enumerate(detail_fields):
-            label_title = ttk.Label(self.frame_details_content, text=f"{field_name}:")
+            label_title = tk.Label(frame_details_content, text=f"{field_name}:")
             label_title.grid(row=i, column=0, sticky="w", padx=5, pady=2)
 
-            label_value = ttk.Label(self.frame_details_content, text="N/A", anchor="w")
+            label_value = tk.Label(frame_details_content, text="N/A", anchor="w")
             label_value.grid(row=i, column=1, sticky="ew", padx=5, pady=2)
             self.labels_peer_details[field_name] = label_value
 
-        self.frame_details_content.grid_columnconfigure(1, weight=1)
+        frame_details_content.columnconfigure(1, weight=1)
 
-        self.btn_close_details = ttk.Button(
-            self.lf_peer_details, text="Close Details", command=self._hide_peer_details
-        )
-        self.btn_close_details.pack(side="bottom", pady=10, anchor="w", padx=10)
-
+        btn_close_details = ttk.Button(frame_details, text="Close", command=self._hide_peer_details)
+        btn_close_details.pack(side="bottom", pady=10, anchor="w", padx=10)
+        
+        btn_save_peer = ttk.Button(frame_details, text="Save", command=self._add_peer)
+        btn_save_peer.pack(side="bottom", pady=10, anchor="w", padx=10)
+        bind_hierarchical("<MouseWheel>", self.lf_details, lambda e: mousewheel_cb(e, cnv_details))
+        
         # 3. Initital setup
-        bind_hierarchical("<MouseWheel>", self.frame_details, lambda e: mousewheel_cb(e, self.cnv_peer_details))
+        
         self._generate_peer_list_treeview()
         self._hide_peer_details()
         self._update()
@@ -162,6 +131,7 @@ class ManagePeersFrame(tk.Frame):
                 peer.str_ip,
                 peer.user_agent.decode(),
                 peer.direction.title(),
+                format_age(int(time.time() )- peer.time_created),
                 peer.latest_ping_time or "N/A",
             )
             
@@ -186,19 +156,25 @@ class ManagePeersFrame(tk.Frame):
         peer = self.node.get_peer_by_id(self.selected_peer_id)
         if peer:
             self.selected_peer = peer
-            self._show_peer_details(peer)
+            self._show_peer_details()
         else:
-            display_error_window(self, title="Something went wrong", err="Error retrieving peer info")
+            messagebox.showerror(title="Something went wrong", message="Error retrieving peer info")
 
-    def _show_peer_details(self, peer: Peer):
+    def _show_peer_details(self):
         # Only grid the area and set title
-        if not self.frame_details.winfo_ismapped():
-            self.frame_details.grid(row=0, column=1, sticky="nsew")
+        if not self.lf_details.winfo_ismapped():
+            self.lf_details.grid(row=0, column=1, sticky="nsew")
 
-        self.lf_peer_details.config(text=f"Peer no. {peer.session_id}")
-        self._config_peer_details(peer)
+        self.lf_details.config(text=f"Peer ID: {self.selected_peer.session_id}")
+        self._config_peer_details()
 
-    def _config_peer_details(self, peer: Peer):
+    def _config_peer_details(self):
+        peer = self.selected_peer
+        if peer is None:
+            for field_name, label_widget in self.labels_peer_details.items():
+                label_widget.config(fg="gray")
+            return
+        
         details_map = {
             "Name": peer.name or "N/A",
             "Direction": peer.direction.title(),
@@ -228,19 +204,77 @@ class ManagePeersFrame(tk.Frame):
             label_widget.config(text=details_map.get(field_name, "N/A"))
 
     def _hide_peer_details(self):
-        self.frame_details.grid_remove()
+        self.lf_details.grid_remove()
         self.selected_peer_id = None
         self.selected_peer = None
 
+    def _add_peer(self):
+        win = tk.Toplevel(self)
+        win.title("Add address")
+        win.geometry("300x160")
+        win.transient(self)
+        win.grab_set()
+        center_popup(self, win)
+        
+        win.columnconfigure(1, weight=1)
+
+        ttk.Label(win, text="Name:").grid(row=0, column=0, padx=10, pady=5, sticky="w")
+        entry_name = ttk.Entry(win)
+        entry_name.grid(row=0, column=1, padx=10, pady=5, sticky="ew")
+        
+        ttk.Label(win, text=f"IP Address: {self.selected_peer.ip}").grid(row=1, column=0, padx=10, pady=5, sticky="w")
+
+        ttk.Label(win, text=f"Network Port: {self.selected_peer.port}").grid(row=2, column=0, padx=10, pady=5, sticky="w")
+
+        frame_btns = ttk.Frame(win)
+        frame_btns.grid(row=3, column=0, columnspan=2, pady=15, padx=10, sticky="e")
+
+        ttk.Button(frame_btns, text="Cancel", command=win.destroy).pack(side="right", padx=(5, 0))
+        ttk.Button(frame_btns, text="Save", command=lambda: self._save_peer(win, entry_name, self.selected_peer.ip, self.selected_peer.port)).pack(side="right")
+        
+
+    def _save_peer(self, win, entry_name, ip, port):
+        name = entry_name.get()
+        if not name:
+            messagebox.showwarning("Failed to save peer", "Name cannot be empty!")
+        else:
+            with sqlite3.connect(APP_CONFIG.get("path", "peers")) as con:
+                cur = con.cursor()
+                
+                cur.execute("SELECT id FROM peers WHERE ip = ? AND port = ?", (ip, port))
+                if cur.fetchone():
+                    messagebox.showwarning("Duplicate Entry", f"Peer with IP Address {ip}:{port} already saved.")
+                    return
+                
+                added = int(time.time())
+                cur.execute("""
+                    INSERT INTO peers (name, ip, port, added)
+                    VALUES (?, ?, ?, ?)
+                """, (name, ip, port, added))
+            
+                con.commit()
+                cur.execute("SELECT id FROM peers WHERE ip = ? and port = ?", (ip, port))
+
+            win.destroy()
+            messagebox.showinfo(title="Peer saved", message=f"Saved \"{name}\" to your peers.")
+    
     def _update(self):
         # Time updating
-        
+        for iid in self.tree_peers.get_children():
+            peer = self.node.get_peer_by_id(int(iid))
+            if peer:
+                self.tree_peers.set(iid, "connection_time", format_age(int(time.time() )- peer.time_created))
+                
         # Peer list updating
         if self.node.check_updated_peers():
+            print("UPDATE")
             self._generate_peer_list_treeview()
+            if self.node.get_peer_by_id(self.selected_peer_id) is None:  # Selected peer disconnected
+                self.lf_details.config(text=self.lf_details.cget('text') + " (Disconnected)")
+                self.selected_peer = self.selected_peer_id = None
             
         # Peer details updating
-        if self.frame_details.winfo_ismapped():
-            self._config_peer_details(self.selected_peer)
+        if self.lf_details.winfo_ismapped():
+            self._config_peer_details()
 
         self.after(500, self._update)

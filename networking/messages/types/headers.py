@@ -24,7 +24,7 @@ class HeadersMessage:
         headers = []
         for _ in range(count):
             header_bytes = stream.read(80)
-            stream.read(1)  # txn count for headers message is always 0
+            stream.read(1)  # tx count for headers message is always 0
             headers.append(header_bytes)
 
         return cls(headers)

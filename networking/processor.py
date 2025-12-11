@@ -6,10 +6,11 @@ from blockchain.block import Block
 from blockchain.transaction import Transaction
 
 from crypto.hashing import HASH256
-from db.tx import get_tx_exists, get_txn
+from db.tx import get_tx_exists, get_tx
 from db.block import *
 from db.peers import get_active_peers, save_peer_from_addr
 
+from db.utxo import update_UTXO_set
 from networking.constants import BLOCK_TYPE, GETADDR_LIMIT, GETBLOCKS_LIMIT, GETHEADERS_LIMIT, TX_TYPE
 from networking.messages.envelope import MessageEnvelope
 from networking.messages.types import *
@@ -34,21 +35,13 @@ class MessageProcessor:
 
         command_str = command.decode('ascii', errors='replace')
 
-        log.debug(f"Processing command '{command_str}' from {peer.str_ip}")
-
         # Construct handler method name
         handler_name = f"process_{command_str}"
         handler_method = getattr(self, handler_name, None)
 
-        if handler_method and callable(handler_method):
-            if asyncio.iscoroutinefunction(handler_method):
-                try:
-                    await handler_method(peer, message)
-                except Exception as e:
-                    log.exception(f"Error executing handler '{handler_name}' for command {command_str} from {peer.str_ip}: {e}")
-        else:
-            log.warning(f"No handler method named '{handler_name}' found for command: {command_str!r} from {peer.str_ip}")
-            # INCREASE BAN SCORE!!!
+        # if handler_method and callable(handler_method):
+        await handler_method(peer, message)
+
 
     async def process_version(self, peer: Peer, msg: VersionMessage):
         # Process version
@@ -91,12 +84,11 @@ class MessageProcessor:
         # Payload (maximum 50,000 entries, which is just over 1.8 megabytes):
 
         inventory = msg.inventory
-        print(inventory)
         missing_inventory = []
         for item in inventory:
             inv_type, inv_hash = item
             if inv_type == TX_TYPE:  # TX
-                if peer.node.mempool.get_tx_exists(inv_hash):
+                if peer.node.mempool.get_valid_tx(inv_hash):
                     continue
                 elif get_tx_exists(inv_hash):
                     continue
@@ -108,7 +100,7 @@ class MessageProcessor:
             missing_inventory.append(
                 (inv_type, inv_hash)
             )
-            
+        
         getdata_msg = GetDataMessage(missing_inventory)
         await peer.send_message(getdata_msg)
 
@@ -182,7 +174,7 @@ class MessageProcessor:
             if curr_hash is None:  # You have reached the tip of the blockchain
                 break
 
-            header = get_block_header(curr_hash)
+            header = get_raw_header(curr_hash)
             if header is None:  # Shouldn't happen unless you messed with your blockchain database
                 break
 
@@ -197,13 +189,9 @@ class MessageProcessor:
         await peer.send_message(header_msg)
 
     async def process_headers(self, peer: Peer, msg: HeadersMessage):
+        """Honestly I have no use for this yet"""
         headers = msg.headers
-        if len(headers) < 1:
-            return
-
-        start_header = headers[0]
-
-        return 
+        
 
     async def process_getblocks(self, peer: Peer, msg: GetBlocksMessage):
         locator_hashes = msg.locator_hashes
@@ -241,44 +229,39 @@ class MessageProcessor:
 
     async def process_block(self, peer: Peer, msg: BlockMessage):
         block_raw = msg.block
-        block = Block.parse(BytesIO(block_raw), full_block=True)
+        block = Block.parse(BytesIO(block_raw))
 
+        
         if get_block_exists(block.hash()):
             return
 
-        if not block.verify():
-            return
+        # 1. No fork scenario
+        if block.verify():
+            save_block(block)
+            update_UTXO_set(block.get_transactions())
+            self.node.mempool.revalidate_mempool()
 
         return
+
 
     async def process_getdata(self, peer: Peer, msg: GetDataMessage):
         inventory = msg.inventory
 
-        notfound_items = []
-        print(inventory[0][1].hex())
-        print(self.node.mempool.get_all_valid_tx()[0].hash().hex())
         for inv_type, inv_hash in inventory:
             if inv_type == TX_TYPE:
-                if tx := get_txn(inv_hash):  # Stored in local blockchain
+                if tx := get_tx(inv_hash):  # Stored in local blockchain
                     tx_msg = TxMessage(tx)
                     await peer.send_message(tx_msg)
 
-                elif tx := self.node.mempool.get_tx(inv_hash):
+                elif tx := self.node.mempool.get_valid_tx(inv_hash):
                     tx_msg = TxMessage(tx)   # Stored in local Mempool
                     await peer.send_message(tx_msg)   
                     
             elif inv_type == BLOCK_TYPE:
-                if block := get_block(inv_hash):
+                if block := get_raw_block(inv_hash):
                     block_msg = BlockMessage(block)
                     await peer.send_message(block_msg)
-                    continue
 
-            notfound_items.append((inv_type, inv_hash))
-
-        if notfound_items:
-            print(notfound_items[0][1].hex())
-            print(notfound_items)
-            await peer.send_message(NotFoundMessage(notfound_items))
 
     async def process_tx(self, peer: Peer, msg: TxMessage):
         tx_raw = msg.tx
@@ -297,9 +280,15 @@ class MessageProcessor:
 
         return
 
-    async def process_mempool(self, peer: Peer, msg: MempoolMessage):
-        return
 
-    async def process_notfound(self, peer: Peer, msg: NotFoundMessage):
-        log.info(f"Received notfound message from peer {peer}")
-        return
+    async def process_mempool(self, peer: Peer, msg: MempoolMessage):
+        """Returns an `inv` message containing the transaction hashes of all valid mempool transactions"""
+        inventory = [
+            (TX_TYPE, tx.hash()) for tx in self.node.mempool.get_all_valid_tx()
+        ]
+        inv_msg = InvMessage(
+            inventory
+        )
+        await peer.send_message(inv_msg)
+
+

@@ -1,4 +1,7 @@
 from typing import List, BinaryIO
+from coincurve import GLOBAL_CONTEXT
+from coincurve._libsecp256k1 import ffi, lib
+
 
 from blockchain.op_codes import *
 from utils.helper import int_to_bytes, bytes_to_int, read_varint, encode_varint
@@ -51,12 +54,12 @@ class Script:
             else:
                 length = len(command)
                 if length < 76:
-                    result += bytes([length])
-                elif length < 0x100:
+                    result += bytes([length]) 
+                elif length < 0x100:     # OP_PUSHDATA1
                     result += b"\x4c" + bytes([length])
-                elif length < 0x10000:
+                elif length < 0x10000:   # OP_PUSHDATA2
                     result += b"\x4d" + int_to_bytes(length, 2)
-                else:
+                else:                    # OP_PUSHDATA4
                     result += b"\x4e" + int_to_bytes(length, 4)
 
                 result += command
@@ -83,26 +86,30 @@ class Script:
     def is_standard_script_sig(self):
         """
         Checks if Script has the following structure
-        - 71-73B DER Signature
-        - 33B SEC Compressed Pubkey
+        - DER Signature
+        - EC Compressed Pubkey
         """
         if len(self.commands) != 2:
             return False
-        
-        if isinstance(self.commands[0], bytes):
-            if not 71 <= len(self.commands[0]) <= 73:
-                return False
-        else:
+
+        first_cmd = self.commands[0][:-1]  # Remove sighash byte
+        if not isinstance(first_cmd, bytes): 
             return False
 
-        if isinstance(self.commands[1], bytes):
-            # P2PKH
-            if len(self.commands[1]) != 33:
-                return False
-        else:
+        sig = ffi.new('secp256k1_ecdsa_signature *')
+        if not lib.secp256k1_ecdsa_signature_parse_der(GLOBAL_CONTEXT.ctx, sig, first_cmd, len(first_cmd)):
             return False
+
+        second_cmd = self.commands[1]
+        if not isinstance(second_cmd, bytes):
+            return False
+
+        pubkey = ffi.new('secp256k1_pubkey *')
+        if not lib.secp256k1_ec_pubkey_parse(GLOBAL_CONTEXT.ctx, pubkey, second_cmd, len(second_cmd)):
+            return False
+
         return True
-            
+                    
     def is_p2pkh(self):
         """
         Checks if Script has the following structure
@@ -149,8 +156,7 @@ class Script:
     
     def get_script_sig_sender(self) -> bytes | None:
         """
-        The sender of a transaction is contained within the ScriptSig
-        of its inputs
+        The sender of a transaction is contained within the ScriptSigof its inputs
 
         Returns a 20B PubkeyHash
         """

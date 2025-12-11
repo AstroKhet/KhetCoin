@@ -1,5 +1,5 @@
 
 
-MIN_RELAY_TX_FEE = 100  # Khets per KB
+MIN_RELAY_TX_FEE_RATE = 100  # Khets per KB
 
 MEMPOOL_EXPIRY = 72 * 3600  # 3 DAys

@@ -1,0 +1,55 @@
+2025-12-11 01:01:11,763 - INFO - miner.py - Miner initiated.
+2025-12-11 01:01:11,763 - INFO - node.py - Node 'Gojo Satoru' initialized on 127.0.0.1:9999
+2025-12-11 01:01:11,822 - INFO - main_window.py - KhetcoinApp successfully started
+2025-12-11 01:01:26,152 - INFO - main_window.py - Node start requested.
+2025-12-11 01:01:26,152 - INFO - node.py - Node starting...
+2025-12-11 01:01:26,152 - INFO - node.py - [Gojo Satoru] Node running. Waiting for shutdown signal...
+2025-12-11 01:01:26,152 - INFO - node.py - Message processor loop started.
+2025-12-11 01:01:26,152 - INFO - node.py - Connecting to initial peers...
+2025-12-11 01:01:26,153 - INFO - node.py - Rotating task started
+2025-12-11 01:01:26,153 - INFO - node.py - [Gojo Satoru] Server listening on ('127.0.0.1', 9999)
+2025-12-11 01:01:26,154 - WARNING - node.py - Attempted to self connect.
+2025-12-11 01:01:26,154 - INFO - node.py - [Gojo Satoru] Attempting TCP connection to 127.0.0.1:8888...
+2025-12-11 01:01:26,154 - INFO - node.py - [Gojo Satoru] TCP connection established with 127.0.0.1:8888. Starting handshake...
+2025-12-11 01:01:26,154 - INFO - peer.py - [127.0.0.1:8888] Sending message: b'version'
+2025-12-11 01:01:26,154 - INFO - peer.py - [127.0.0.1:8888] Sent message: version (124 bytes)
+2025-12-11 01:01:26,154 - INFO - peer.py - [127.0.0.1:8888] Sending message: b'ping'
+2025-12-11 01:01:26,154 - INFO - peer.py - [127.0.0.1:8888] Sent message: ping (32 bytes)
+2025-12-11 01:01:26,155 - INFO - peer.py - [127.0.0.1:8888] Received message: version
+2025-12-11 01:01:26,155 - INFO - peer.py - [127.0.0.1:8888] Sending message: b'verack'
+2025-12-11 01:01:26,155 - INFO - peer.py - [127.0.0.1:8888] Sent message: verack (24 bytes)
+2025-12-11 01:01:26,155 - INFO - peer.py - [127.0.0.1:8888] Received message: ping
+2025-12-11 01:01:26,155 - INFO - peer.py - [127.0.0.1:8888] Sending message: b'pong'
+2025-12-11 01:01:26,155 - INFO - peer.py - [127.0.0.1:8888] Sent message: pong (32 bytes)
+2025-12-11 01:01:26,155 - INFO - peer.py - [127.0.0.1:8888] Received message: verack
+2025-12-11 01:01:26,155 - INFO - node.py - [Gojo Satoru] mempool message sent
+2025-12-11 01:01:26,155 - INFO - peer.py - [127.0.0.1:8888] Sending message: b'mempool'
+2025-12-11 01:01:26,155 - INFO - peer.py - [127.0.0.1:8888] Sent message: mempool (24 bytes)
+2025-12-11 01:01:26,155 - INFO - peer.py - [127.0.0.1:8888] Received message: pong
+2025-12-11 01:01:26,155 - INFO - peer.py - [127.0.0.1:8888] Received message: inv
+2025-12-11 01:01:26,155 - INFO - peer.py - [127.0.0.1:8888] Sending message: b'getdata'
+2025-12-11 01:01:26,155 - INFO - peer.py - [127.0.0.1:8888] Sent message: getdata (25 bytes)
+2025-12-11 01:01:36,586 - WARNING - peer.py - [127.0.0.1:8888] Connection closed: IncompleteReadError
+2025-12-11 01:01:36,586 - INFO - peer.py - [127.0.0.1:8888] Closing connection...
+2025-12-11 01:01:36,587 - INFO - node.py - Peer No. 0 disconnected.
+2025-12-11 01:01:57,390 - INFO - node.py - Connected to peer no. 1 from 127.0.0.1:49970. Starting handshake...
+2025-12-11 01:01:57,390 - INFO - peer.py - [127.0.0.1:49970] Sending message: b'version'
+2025-12-11 01:01:57,390 - INFO - peer.py - [127.0.0.1:49970] Sent message: version (124 bytes)
+2025-12-11 01:01:57,390 - INFO - peer.py - [127.0.0.1:49970] Sending message: b'ping'
+2025-12-11 01:01:57,390 - INFO - peer.py - [127.0.0.1:49970] Sent message: ping (32 bytes)
+2025-12-11 01:01:57,390 - INFO - peer.py - [127.0.0.1:49970] Received message: version
+2025-12-11 01:01:57,390 - INFO - peer.py - [127.0.0.1:49970] Sending message: b'verack'
+2025-12-11 01:01:57,390 - INFO - peer.py - [127.0.0.1:49970] Sent message: verack (24 bytes)
+2025-12-11 01:01:57,390 - INFO - peer.py - [127.0.0.1:49970] Received message: ping
+2025-12-11 01:01:57,390 - INFO - peer.py - [127.0.0.1:49970] Received message: verack
+2025-12-11 01:01:57,390 - INFO - peer.py - [127.0.0.1:49970] Sending message: b'pong'
+2025-12-11 01:01:57,390 - INFO - peer.py - [127.0.0.1:49970] Sent message: pong (32 bytes)
+2025-12-11 01:01:57,391 - INFO - peer.py - [127.0.0.1:49970] Received message: pong
+2025-12-11 01:01:57,391 - INFO - node.py - [Gojo Satoru] Handshake successful with incoming peer 127.0.0.1:49970. Adding to peers.
+2025-12-11 01:01:57,391 - INFO - peer.py - [127.0.0.1:49970] Received message: mempool
+2025-12-11 01:01:57,391 - INFO - peer.py - [127.0.0.1:49970] Sending message: b'inv'
+2025-12-11 01:01:57,391 - INFO - peer.py - [127.0.0.1:49970] Sent message: inv (25 bytes)
+2025-12-11 01:01:57,391 - INFO - peer.py - [127.0.0.1:49970] Received message: getdata
+2025-12-11 01:03:26,229 - INFO - node.py - [Gojo Satoru] External shutdown triggered.
+2025-12-11 01:03:26,230 - INFO - miner.py - All miner processes terminated.
+2025-12-11 01:03:26,273 - INFO - main_window.py - KhetCoin App shutdown complete.

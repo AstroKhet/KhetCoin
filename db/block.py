@@ -2,14 +2,18 @@ import logging
 from io import BytesIO
 
 from dataclasses import dataclass
+from crypto.hashing import HASH256
 from db.constants import *
-from utils.helper import encode_varint, bytes_to_int, read_varint
+from ktc_constants import MAX_TARGET, ONE_DAY, RETARGET_INTERVAL
+from utils.helper import bits_to_target, encode_varint, bytes_to_int, int_to_bytes, read_varint
 from utils.config import APP_CONFIG
 
 import os
 
 log = logging.getLogger(__name__)
 
+
+# 0. Block Metadata dataclass
 @dataclass
 class BlockMetadata:
     block_hash: bytes
@@ -17,7 +21,7 @@ class BlockMetadata:
     offset: int
     full_block_size: int 
     timestamp: int 
-    no_txns: int
+    no_txs: int
     fee: int 
     total_sent: int  
     height: int  
@@ -26,9 +30,11 @@ class BlockMetadata:
 _metadata_cache: dict[bytes, BlockMetadata | None] = dict()
 
 
-def get_blk_dat_no():
-    # retrieves the current (highest) blk*.dat file from BLOCKS_DIR
-    # blk{8 digit number}.dat
+# 1. App meta functions
+
+def get_block_dat_no():
+    # retrieves the current (highest) block*.dat file from BLOCKS_DIR
+    # block{8 digit number}.dat
     return max(
         int(filename[3:11])
         for filename in os.listdir(APP_CONFIG.get("path", "blockchain"))
@@ -45,31 +51,12 @@ def get_blockchain_height():
             else:
                 return 0
 
-
-def get_block_hash_at_height(height: int | bytes) -> bytes | None:
+# 2. Raw header/block by height/hash
+def get_raw_block(block_hash: bytes, _full: bool = True) -> bytes | None:
     """
-    Takes in a height as int or bytes(varint) and returns the corresponding block hash
+    Used to return a FULL block in byte form.
+    \n`_full` is a legacy variable used for `get_header`. Do not use!
     """
-    if isinstance(height, int):
-        height = encode_varint(height)
-    with LMDB_ENV.begin(db=HEIGHT_DB) as db:
-        value = db.get(height)
-        if value is None:
-            return None
-
-        return value
-
-
-def get_block_at_height(height: int, full: bool = False) -> bytes | None:
-    if block_hash := get_block_hash_at_height(height):
-        if block := get_block(block_hash, full):
-            return block
-
-    log.warning(f"No block found at height {height}")
-    return None
-
-
-def get_block(block_hash: bytes, full: bool = False) -> bytes | None:
     # block should be a 32B  representation of the block hash
     with LMDB_ENV.begin(db=BLOCKS_DB) as db:
         value = db.get(block_hash)
@@ -86,19 +73,55 @@ def get_block(block_hash: bytes, full: bool = False) -> bytes | None:
 
         magic = stream.read(4)
         if magic != BLOCK_MAGIC:
+            log.warning("Block magic not placed correctly in .dat file.")
             return None
 
-        block_size = bytes_to_int(stream.read(4))
-        if full:
+        if _full:
+            block_size = bytes_to_int(stream.read(4))
             return stream.read(block_size)
-        else:  # headers only
+        else:  # Return 80B to be parsed by Header ONLY! Block class is designed for FULL blocks!
             return stream.read(80)
 
 
-def get_block_header(block_hash: bytes) -> bytes | None:
-    return get_block(block_hash, full=False)
+def get_raw_block_at_height(height: int, _full: bool = True) -> bytes | None:
+    """
+    Used to return a FULL block in byte form based on its height.
+    `_full` is a legacy variable used for `get_header_at_height`. Do not use!
+    """
+    if block_hash := get_block_hash_at_height(height):
+        if _full:
+            if block_raw := get_raw_block(block_hash, True):
+                return block_raw
+        else:
+            if header_raw := get_raw_header(block_hash):
+                return header_raw
+
+    log.warning(f"No {['header', 'block'][_full]} found at height {height}!")
+    return None
 
 
+def get_raw_header(block_hash: bytes) -> bytes | None:
+    """Returns a block header in byte form"""
+    return get_raw_block(block_hash, _full=False)
+
+
+def get_raw_header_at_height(height: int) -> bytes | None:
+    """Returns header in byte form based on its height."""
+    return get_raw_block_at_height(height, _full=False)
+
+
+# 2.1 Support function for converting height to hash
+def get_block_hash_at_height(height: int | bytes) -> bytes | None:
+    """
+    Takes in a height as int or bytes(varint) and returns the corresponding block hash
+    """
+    if isinstance(height, int):
+        height = encode_varint(height)
+    with LMDB_ENV.begin(db=HEIGHT_DB) as db:
+        return db.get(height)
+
+
+# 3. Block metadata
 def get_block_metadata(block_hash: bytes) -> BlockMetadata | None:
     if block_hash in _metadata_cache:
         return _metadata_cache.get(block_hash)
@@ -113,25 +136,28 @@ def get_block_metadata(block_hash: bytes) -> BlockMetadata | None:
             offset=bytes_to_int(value[4:8]),
             full_block_size=bytes_to_int(value[8:12]),
             timestamp=bytes_to_int(value[12:16]),
-            no_txns=bytes_to_int(value[16:20]),
+            no_txs=bytes_to_int(value[16:20]),
             total_sent=bytes_to_int(value[20:28]),
             fee=bytes_to_int(value[28:36]),
             height=read_varint(BytesIO(value[36:])),
         )
 
 def get_block_metadata_at_height(height: int) -> BlockMetadata | None:
-    blk_hash = get_block_hash_at_height(height)
-    if not blk_hash:
+    block_hash = get_block_hash_at_height(height)
+    if not block_hash:
         return None
     return get_block_metadata(blk_hash)
 
-# Commonly used metadata fields
+
+# 4. Commonly used metadata fields
 # Also I've used this too much before implementing the metadata dataclass so here it stays
 def get_block_height_at_hash(block_hash: bytes) -> int | None:
     if meta := get_block_metadata(block_hash):
         return meta.height
     return None
 
+
+# 5. Misc functions
 def get_block_exists(block_hash: bytes) -> bool:
     with LMDB_ENV.begin(db=BLOCKS_DB) as db:
         return db.get(block_hash) is not None
@@ -142,37 +168,131 @@ def median_time_past() -> int:
     timestamps = []
 
     for h in range(height, max(0, height - 11), -1):
-        block = get_block_at_height(h)
-        if block := get_block_at_height(h):
-            timestamps.append(get_block_timestamp(block))
-        else:
-            timestamps.append(0)
+        if header_raw := get_raw_header_at_height(h):
+            timestamps.append(bytes_to_int(header_raw[68:72]))
 
     timestamps.sort()
     return timestamps[len(timestamps) // 2]
 
 
-def get_block_version(header: bytes) -> int:
-    return bytes_to_int(header[0:4])
+def calculate_block_target(height: int) -> int | None:
+    if height < RETARGET_INTERVAL:
+        return MAX_TARGET
+    
+    if (prev_header := get_raw_header_at_height(height - 1)):
+        prev_target =  bits_to_target(prev_header[72:76])
+    else:
+        return None
+    
+    # Non-retargetting height
+    if height % RETARGET_INTERVAL != 0:
+        return prev_target
+    
+    # Retargetting height
+    else:
+        if (start_header := get_raw_header_at_height(height - RETARGET_INTERVAL)):
+            start_time = bytes_to_int(start_header[68:72])
+        else:
+            return None
+
+        end_time = bytes_to_int(prev_header[68:72])
+ 
+        t_elapsed = end_time - start_time
+        new_target = int(prev_target * t_elapsed / ONE_DAY)
+        
+        return max(prev_target // 4, min(new_target, prev_target * 4))
 
 
-def get_block_prev_hash(header: bytes) -> bytes:
-    return header[4:36]
+def save_block(block) -> bool:
+    """
+    Pure function to save a full block.
+    Block validation should be done outside this function
+    """
+    header = block.header
+    txs = block.get_transactions()
+    raw_txs = [tx.serialize() for tx in txs]
 
+    block_hash = block.hash()
 
-def get_block_merkle_root(header: bytes) -> bytes:
-    return header[36:68]
+    no_transactions_varint = encode_varint(len(txs))
+    block_raw = header + no_transactions_varint + b"".join(raw_txs)
+    block_size = len(block_raw)
 
+    # .dat file config
+    dat_file_no = get_block_dat_no()
+    dat_file = os.path.join(APP_CONFIG.get("path", "blockchain"), f"blk{dat_file_no:08}.dat")
+    if not os.path.exists(dat_file):
+        open(dat_file, "wb").close()
 
-def get_block_timestamp(header: bytes) -> int:
-    return bytes_to_int(header[68:72])
+    offset = os.path.getsize(dat_file)
+    if offset + block_size > DAT_SIZE:
+        dat_file_no += 1
+        dat_file = os.path.join(APP_CONFIG.get("path", "blockchain"), f"blk{dat_file_no:08}.dat")
 
+    # Saving data
+    height = get_blockchain_height() + 1
+    timestamp = header[68:72]
 
-def get_block_bits(header: bytes) -> bytes:
-    return header[72:76]
+    try:
+        with open(dat_file, "ab") as dat:
+            dat.write(BLOCK_MAGIC)
+            dat.write(int_to_bytes(len(block_raw)))
+            dat.write(block_raw)
 
+        with LMDB_ENV.begin(write=True) as db:
+            total_sent = 0
+            total_fees = 0
+            for tx in txs:
+                total_fees += tx.fee()
+                total_sent += sum(tx_out.value for tx_out in tx.outputs)
 
-def get_block_nonce(header: bytes) -> int:
-    return bytes_to_int(header[76:80])
+            block_value = (
+                int_to_bytes(dat_file_no)
+                + int_to_bytes(offset)
+                + int_to_bytes(block_size)
+                + timestamp
+                + int_to_bytes(len(txs))
+                + int_to_bytes(total_sent, 8)
+                + int_to_bytes(total_fees, 8)
+                + encode_varint(height)
+            )
+            db.put(block_hash, block_value, db=BLOCKS_DB)
 
+            offset += 88 + len(no_transactions_varint)
+            for i, tx in enumerate(raw_txs):
+                tx_hash = HASH256(tx)
+                tx_value = (
+                    int_to_bytes(dat_file_no)
+                    + int_to_bytes(offset)
+                    + int_to_bytes(len(tx))
+                    + int_to_bytes(i)
+                    + encode_varint(height)
+                )
+                db.put(tx_hash, tx_value, db=TX_DB)
+                offset += len(tx)
 
+            db.put(encode_varint(height), block_hash, db=HEIGHT_DB)
+
+            for tx in txs:
+                if not tx.is_coinbase():
+                    for tx_in in tx.inputs:
+                        outpoint = tx_in.prev_tx_hash + int_to_bytes(tx_in.prev_index)
+                        db.delete(outpoint, db=UTXO_DB)
+
+                        pk = tx_in.script_sig.get_script_sig_sender()
+                        if pk:
+                            db.delete(pk, outpoint, db=ADDR_DB)
+
+                for i, tx_out in enumerate(tx.outputs):
+                    outpoint = tx.hash() + int_to_bytes(i)
+                    db.put(outpoint, tx_out.serialize(), db=UTXO_DB)
+
+                    pk = tx_out.script_pubkey.get_script_pubkey_receiver()
+                    if pk:
+                        db.put(pk, outpoint, db=ADDR_DB)
+        return True
+    
+    except Exception as e:
+        log.exception(f"Error attempting to save block: {e}")
+        return False
+    

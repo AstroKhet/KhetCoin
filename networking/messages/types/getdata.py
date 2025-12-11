@@ -17,7 +17,7 @@ class GetDataMessage:
     def __str__(self):
         lines = [f"[getdata]"]
         for i, (inv_type, inv_hash) in enumerate(self.inventory):
-            inv_type_name = "Txn" if inv_type == 1 else "Blk"
+            inv_type_name = "Tx" if inv_type == 1 else "Block"
             lines.append(f"  Item {i} ({inv_type_name}): {inv_hash.hex()}")
 
         return "\n".join(lines)

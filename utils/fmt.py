@@ -53,11 +53,12 @@ def print_bytes(data: bytes):
 def format_bytes(size_bytes: int) -> str:
     if size_bytes == 0:
         return "0B"
+    
     size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
     i = int(math.floor(math.log(size_bytes, 1024)))
     p = math.pow(1024, i)
     s = round(size_bytes / p, 2)
-    return "%s %s" % (s, size_name[i])
+    return f"{s} {size_name[i]}"
 
 
 def format_age(seconds: int | float) -> str:
@@ -69,7 +70,7 @@ def format_age(seconds: int | float) -> str:
     years, mo = divmod(months, 12)
 
     # List of all units in order
-    units = [("y", years), ("m", mo), ("d", d), ("h", h), ("m", m), ("s", s)]
+    units = [("Y", years), ("M", mo), ("D", d), ("h", h), ("m", m), ("s", s)]
 
     # Find first non-zero unit
     for i, (_, value) in enumerate(units):
@@ -98,6 +99,20 @@ def format_number(num) -> str:
     else:
         return str(num)
 
+def format_hashrate(x):
+    HASH_UNITS = [
+        (1e3,  "KH/s"),
+        (1e6,  "MH/s"),
+        (1e9,  "GH/s"),
+        (1e12, "TH/s"),
+        (1e15, "PH/s"),
+        (1e18, "EH/s")
+    ]
+    for threshold, name in reversed(HASH_UNITS):
+        if x >= threshold:
+            return f"{x/threshold:.2f} {name}"
+    return f"{x:.2f} H/s"
+
 
 def truncate_bytes(h: bytes | str, ends=2) -> str:
     if isinstance(h, bytes):
@@ -106,3 +121,12 @@ def truncate_bytes(h: bytes | str, ends=2) -> str:
     if len(h) < ends * 4:
         return h #type: ignore
     return h[:ends*2] + "...." + h[-ends*2:]  #type: ignore
+
+
+def format_snake_case(text):
+    """
+    Repalces underscores with spaces and capitalizes each word.
+    
+    Example: oh_hell_naw -> Oh Hell Naw
+    """
+    return " ".join(w[0].upper() + w[1:] for w in text.split("_"))

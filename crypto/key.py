@@ -83,7 +83,10 @@ def wif_encode(addr: bytes | str, version=b"\x00") -> str:
     return base58.b58encode(code).decode()
 
 def wif_decode(wif: str) -> bytes | None:
-    decode = base58.b58decode(wif)
+    try:
+        decode = base58.b58decode(wif)
+    except ValueError:
+        return None
     version = decode[:1]
     addr = decode[1:-4]
     checksum = decode[-4:]

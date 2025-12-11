@@ -4,22 +4,15 @@ from random import randint
 import time
 from typing import List
 
+from db.block import get_blockchain_height
+from networking.constants import PING_TIMEOUT, USER_AGENT
+from networking.constants import PROTOCOL_VERSION, SERVICES
+from networking.messages.envelope import MessageEnvelope
 from networking.messages.types import *
 from networking.messages.types import CORE_MESSAGES
-from networking.constants import PING_TIMEOUT, USER_AGENT
-from networking.messages.envelope import MessageEnvelope
-
-from db.block import get_blockchain_height
-from utils.helper import str_ip
-from networking.constants import PROTOCOL_VERSION, SERVICES
 
 
-# Setup basic logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
 log = logging.getLogger(__name__)
-
 
 class Peer:
     def __init__(
@@ -49,8 +42,8 @@ class Peer:
         
         self.addr = writer.get_extra_info("peername")
         self.ip: str = self.addr[0]
-        self.port: int = self.addr[0]
-        self.str_ip = str_ip(self.addr)
+        self.port: int = self.addr[1]
+        self.str_ip = f"{self.addr[0]}:{self.addr[1]}"
 
         # Session specific variables
         self.session_id: int = session_id
@@ -59,7 +52,7 @@ class Peer:
 
         # TODO Status flags
         ## Might need this to flag that I am awaiting for continuous data from this peer
-        ## i.e. block with n txs -> tx1 -> tx2 -> ... -> txn
+        ## i.e. block with n txs -> tx1 -> tx2 -> ... -> tx
         
         # Tracking
         ## Timestamps in miliseconds
@@ -88,17 +81,16 @@ class Peer:
         # asyncio variables
         self.established = asyncio.Future()
         self.listen_task: asyncio.Task | None = None
-        log.debug(f"Peer object created for {self.str_ip}")
+        log.debug(f"[{self.str_ip}] Peer object created.")
 
     async def read_message(self) -> MessageEnvelope | None:
-        log.debug(f"[{self.str_ip}] Attempting to read message envelopeelope...")
         try:
             envelope = await MessageEnvelope.parse_async(self.reader)
 
-            log.info(
-                f"[{self.str_ip}] Received message: {envelope.command.decode('ascii', errors='replace')}"
-            )
+            log.info(f"[{self.str_ip}] Received message: {envelope.command.decode('ascii', errors='replace')}")
             return envelope
+        except ValueError:
+            return None
         except (asyncio.IncompleteReadError, ConnectionResetError, EOFError) as e:
             log.warning(f"[{self.str_ip}] Connection closed: {type(e).__name__}")
             await self.close()
@@ -109,6 +101,7 @@ class Peer:
             return None
 
     async def send_message(self, msg):
+        """Sends `msg` to this peer"""
         if isinstance(msg, MessageEnvelope):
             envelope = msg
         elif isinstance(msg, CORE_MESSAGES):
@@ -118,7 +111,7 @@ class Peer:
             return 
         
         cmd = envelope.command.decode("ascii", errors="replace")
-        log.info(f"Sending message: {msg.command}")
+        log.info(f"[{self.str_ip}] Sending message: {msg.command}")
 
         try:
             serialized_envelope = envelope.serialize()
@@ -136,7 +129,7 @@ class Peer:
 
             log.info(f"[{self.str_ip}] Sent message: {cmd} ({len(serialized_envelope)} bytes)")
         except Exception as e:
-            log.exception(f"{type(e).__name__}: Error sending message '{cmd}': {e}")
+            log.exception(f"[{self.str_ip}] {type(e).__name__}: Error sending message '{cmd}': {e}")
             await self.close()
 
     async def send_version(self):
@@ -168,10 +161,12 @@ class Peer:
             if self.reader.at_eof():
                 log.warning(f"[{self.str_ip}] Reader at EOF. Stopping listener.")
                 break
+            
             envelope = await self.read_message()
             if envelope is None:
-                log.warning(f"[{self.str_ip}] Read None message. Stopping listener.")
-                break
+                continue
+                # log.warning(f"[{self.str_ip}] Read None message. Stopping listener.")
+                # break
 
             self.bytes_recv += envelope.payload_size
             self.node.bytes_recv += envelope.payload_size
@@ -209,11 +204,6 @@ class Peer:
         finally:
             print(f"removing peer {self.session_id}...")
             self.node.remove_peer(self) 
-
-    def save(self):
-        # TODO: Saves peer inside PEERS_SQL
-            
-        return
         
     def ping(self):
         task = asyncio.create_task(self._ping_task())

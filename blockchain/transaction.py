@@ -1,19 +1,18 @@
 import logging
 
-from typing import List, BinaryIO, Optional
+from typing import BinaryIO
 from coincurve import PrivateKey
-from db.constants import LMDB_ENV, WALLET_DB
-from ktc_constants import COINBASE_MATURITY, MAX_KHETS, KTC, MAX_KTC, MAX_BLOCK_SIZE
+from ktc_constants import MAX_BLOCK_SIZE
 
 from blockchain.constants import SIGHASH_ALL, SIGOPS_LIMIT
-from blockchain.script import *
+from blockchain.script import Script
 
-from crypto.hashing import *
+from crypto.hashing import HASH256
 
 from db.block import get_blockchain_height, median_time_past
-from db.tx import get_txn
+from db.tx import get_tx
 
-from utils.fmt import format_bytes, print_bytes
+from utils.fmt import format_bytes
 from utils.helper import *
 
 
@@ -39,8 +38,10 @@ class TransactionInput:
         self.prev_index = prev_index 
         self.script_sig = script_sig    
         
-        # Used for RBF & relative txn locktime, but not implemented here
+        # Used for RBF & relative tx locktime, but not implemented here
         self.sequence = sequence            
+        
+        self._prev_output = None
 
     def __str__(self):
         result =  f"\tPrev Tx Hash: {self.prev_tx_hash.hex()}\n"
@@ -50,14 +51,17 @@ class TransactionInput:
         return result
 
     @classmethod
-    def parse(cls, stream: BinaryIO) -> 'TransactionInput':
+    def parse(cls, stream: BinaryIO | bytes) -> 'TransactionInput':
+        if isinstance(stream, bytes):
+            stream = BytesIO(stream)
+            
         prev_hash = stream.read(32)
         prev_index = bytes_to_int(stream.read(4))
         script_sig = Script.parse(stream) 
         sequence = bytes_to_int(stream.read(4))
         return cls(prev_hash, prev_index, script_sig, sequence)
 
-    def serialize(self, custom_script: Optional[Script]=None) -> bytes:
+    def serialize(self, custom_script: Script | None = None) -> bytes:
         """Serializes the transaction input. Uses custom_script if provided."""
         result: bytes = self.prev_tx_hash
         result += int_to_bytes(self.prev_index)
@@ -69,33 +73,30 @@ class TransactionInput:
 
         result += int_to_bytes(self.sequence)
         return result
-
-    def fetch_tx(self) -> 'Transaction | None':
-        # Fetches the full transaction based on prev_hash
-        tx_io = get_txn(self.prev_tx_hash)
-        if tx_io:
-            return Transaction.parse(BytesIO(tx_io))
-        else:
-            return None
+        
+    def fetch_tx_output(self) -> 'TransactionOutput | None':
+        if self._prev_output:
+            return self._prev_output
+        
+        if tx_raw := get_tx(self.prev_tx_hash):
+            tx = Transaction.parse(tx_raw)
+            try:
+                self._prev_output = tx.outputs[self.prev_index]
+                return self._prev_output
+            except IndexError:
+                return None
+        return None
 
     def value(self) -> int | None:
-        source_tx = self.fetch_tx()
-        if source_tx:
-            source_val = source_tx.outputs[self.prev_index].value
-            return source_val
-        else:  # No prev tx found?
-            return None
+        if tx_out := self.fetch_tx_output():
+            return tx_out.value
+        return None
 
     def script_pubkey(self) -> Script | None:
-        """
-        Retrieves the locking script of this Input
-        """
-        source_tx = self.fetch_tx()
-        if source_tx:    
-            source_script_pk = source_tx.outputs[self.prev_index].script_pubkey
-            return source_script_pk
-        else:
-            return None
+        """Retrieves the locking script of this Input"""
+        if tx_out := self.fetch_tx_output():    
+            return tx_out.script_pubkey
+        return None
 
 
 class TransactionOutput:
@@ -118,7 +119,10 @@ class TransactionOutput:
         return result
     
     @classmethod
-    def parse(cls, stream: BinaryIO) -> 'TransactionOutput':
+    def parse(cls, stream: BinaryIO | bytes) -> 'TransactionOutput':
+        if isinstance(stream, bytes):
+            stream = BytesIO(stream)
+            
         value = bytes_to_int(stream.read(8))
         script_pubkey = Script.parse(stream)
         return cls(value, script_pubkey)
@@ -149,8 +153,8 @@ class Transaction:
     def __init__(
         self,
         version: int,
-        inputs: List[TransactionInput],
-        outputs: List[TransactionOutput],
+        inputs: list[TransactionInput],
+        outputs: list[TransactionOutput],
         locktime: int,
     ):
         self.version = version
@@ -169,21 +173,22 @@ class Transaction:
     def __str__(self):
         result = f"Version: {self.version}\n"
         result += f"Inputs: \n"
-        for input in self.inputs:
-            result += str(input)
+        for tx_in in self.inputs:
+            result += str(tx_in)
             result += "\n"
         result += f"Outputs: \n"
-        for output in self.outputs:
-            result += str(output)
+        for tx_out in self.outputs:
+            result += str(tx_out)
             result += "\n"
         result += f"Locktime: {self.locktime}\n"
         return result
 
     @classmethod
-    def parse(cls, stream: BinaryIO) -> 'Transaction':
-        """
-        Parses a transaction from a Binary I/O
-        """
+    def parse(cls, stream: BinaryIO | bytes) -> 'Transaction':
+        """Parses a transaction from a Binary I/O or bytes"""
+        if isinstance(stream, bytes):
+            stream = BytesIO(stream)
+            
         version = bytes_to_int(stream.read(4))
 
         no_inputs = read_varint(stream)
@@ -210,17 +215,17 @@ class Transaction:
         result: bytes = int_to_bytes(self.version)
 
         result += encode_varint(len(self.inputs))
-        result += b''.join([input.serialize() for input in self.inputs])
+        result += b''.join([tx_in.serialize() for tx_in in self.inputs])
 
         result += encode_varint(len(self.outputs))
-        result += b''.join([output.serialize() for output in self.outputs])
+        result += b''.join([tx_out.serialize() for tx_out in self.outputs])
 
         result += int_to_bytes(self.locktime)
 
         self._serialize_cache = result
         return result
 
-    def _sig_hash(self, index: int,  NO_HASH: bool = False) -> bytes:
+    def _sig_hash(self, index: int, NO_HASH: bool = False) -> bytes:
         """
         Provides 'z', the hash of the transaction to be signed
         Here the message is this transaction without script_sigs for
@@ -254,7 +259,7 @@ class Transaction:
 
         msg_hash = self._sig_hash(index)
 
-        signature = privkey.sign(msg_hash, hasher=None) + bytes([SIGHASH_ALL])
+        signature = privkey.sign(msg_hash, hasher=HASH256) + bytes([SIGHASH_ALL])
         # P2PKH
         pubkey = privkey.public_key.format(compressed=True)
         self.inputs[index].script_sig = Script([signature, pubkey])
@@ -367,19 +372,7 @@ class Transaction:
         if coinbase_input.prev_index != 0xffffffff:
             return False
 
-        return True
-
-    def coinbase_height(self) -> int | None:
-        if not self.is_coinbase():
-            log.exception(f"<TX {self.hash()}> No coinbase height for non coinbase txn")
-            return None
-
-        if self.inputs[0].script_sig.sigops > 0:
-            log.exception(f"<TX {self.hash()}> Invalid coinbase txn: scriptSig must have 0 SIGOPS")
-            return None
-        else:
-            height = bytes_to_int(self.inputs[0].script_sig.commands[0]) # type: ignore
-        return height       
+        return True 
 
     def hash(self) -> bytes:
         tx_hash = HASH256(self.serialize())
@@ -394,7 +387,12 @@ class Transaction:
             return None
         output_value = self.output_value()
         return  input_value - output_value # should be >0
-
+    
+    def fee_rate(self):
+        if (fee := self.fee()) is not None:
+            return fee / len(self.serialize())
+        return None
+        
     def input_value(self) -> int | None:
         val = 0
         for i, inp in enumerate(self.inputs):
@@ -419,9 +417,7 @@ class Transaction:
         return len(self.serialize())
 
     def from_(self):
-        """
-        Returns where the Transaction inputs came from
-        """
+        """Returns where the Transaction inputs came from"""
         if self.is_coinbase():
             from_ = "Coinbase Reward"
         else:   
@@ -436,9 +432,7 @@ class Transaction:
         return from_
     
     def to(self):
-        """
-        Returns where the Transaction outputs are going to
-        """
+        """Returns where the Transaction outputs are going to"""
         to = self.outputs[0].script_pubkey.get_script_pubkey_receiver()
         no_outputs = len(self.outputs)
         if not to:
@@ -449,58 +443,11 @@ class Transaction:
                 break
         return to
 
+    def copy(self):
+        return Transaction(self.version, self.inputs, self.outputs, self.locktime)
     def __hash__(self):
         return self.hash()
 
     def __eq__(self, other):
         return self.hash() == other.hash()
 
-
-# Auxillary UTXO functionality for wallet
-def save_utxo_addr(addr: bytes, tx_hash: bytes, index: int):
-    with LMDB_ENV.begin(db=WALLET_DB) as db:
-        outpoint = tx_hash + int_to_bytes(index)
-        db.put(addr, outpoint)
-
-
-def get_utxo_addr(addr: bytes) -> list[tuple]:
-    utxos = []
-    with LMDB_ENV.begin(db=WALLET_DB) as db:
-        cursor = db.cursor()
-        if cursor.set_key(addr):
-            for outpoint in cursor.iternext_dup():
-                utxos.append((outpoint[:32], bytes_to_int(outpoint[32:36])))
-    return utxos
-
-
-def get_utxo_addr_value(addr: bytes) -> int:
-    # TODO: Implement UTXO Caching
-    value = 0
-    for tx_hash, idx in get_utxo_addr(addr):
-        if tx_raw := get_txn(tx_hash):
-            tx = Transaction.parse_static(tx_raw)
-            tx_out = tx.outputs[idx]
-            value += tx_out.value
-        # else txn not found
-    return value
-
-
-def delete_utxo_addr(addr: bytes, tx_hash: bytes, index: int):
-    with LMDB_ENV.begin(db=WALLET_DB) as db:
-        outpoint = tx_hash + int_to_bytes(index)
-        db.delete(addr, outpoint)
-
-
-def count_utxo_addr(addr: bytes | None = None) -> int:
-    """
-    Counts UTXOs associated with addr if set, otherwise returns size of entire UTXO set
-    """
-    with LMDB_ENV.begin(db=WALLET_DB) as txn:
-        cursor = txn.cursor()
-        if addr is None:
-            stat = txn.stat()
-            return stat["entries"]
-        if cursor.set_key(addr):
-            return cursor.count()
-        else:
-            return 0

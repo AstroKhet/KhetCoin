@@ -33,8 +33,8 @@ def INITIAL_SETUP():
             CREATE TABLE IF NOT EXISTS peers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT,
-                address TEXT,
-                user_agent TEXT,
+                ip TEXT,
+                port INTEGER,
                 ban_score INTEGER
             );""")
         con.commit()
@@ -43,12 +43,19 @@ def INITIAL_SETUP():
     return 
 
 
-def RUNTIME_SETUP():
+# TODO: param n & filename used for logging 2 nodes on one computer ONLY
+def RUNTIME_SETUP(n=""):
     """Setup for each time main.py is run"""
-
+    if APP_CONFIG.get("app", "initial_setup"):
+        INITIAL_SETUP()
+        
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s"
+        format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s",
+        # filename=APP_CONFIG.get("path", "log"),
+        filename=os.path.join(APP_CONFIG.base_dir, f".local/log-{n}.txt"),
+        filemode="w",
+        force=True
     )
     
     

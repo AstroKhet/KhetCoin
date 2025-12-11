@@ -38,12 +38,6 @@ def encode_varint(i: int) -> bytes:
     else:  # assumes i <= 0xffffffffffffffff
         return b'\xff' + int_to_bytes(i)
 
-def str_ip(addr: tuple, name="") -> str:
-    if name:
-        return f"[{name}]->{addr[0]}:{addr[1]}"
-    else:
-        return f"{addr[0]}:{addr[1]}"
-
 
 def encode_ip(ip: bytes | str | int) -> bytes:
     """Encode IP (str, bytes, or int) into 16-byte Bitcoin format."""
@@ -70,3 +64,21 @@ def format_ip(ip_bytes: bytes) -> str:
         return ""
 
 
+def bits_to_target(bits: bytes):
+    return bytes_to_int(bits[:3]) * pow(256, bits[3] - 3)
+
+
+def target_to_bits(target: int):
+    raw = target.to_bytes(32, byteorder="big").lstrip(b"\x00")
+    size = len(raw)
+
+    if size <= 3:
+        mantissa = int.from_bytes(raw, "big") << (8 * (3 - size))
+    else:
+        mantissa = int.from_bytes(raw[:3], "big")
+
+    if mantissa & 0x00800000:
+        mantissa >>= 8
+        size += 1
+    
+    return int_to_bytes(mantissa, 3) + int_to_bytes(size, 1)

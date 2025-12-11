@@ -10,7 +10,7 @@ from blockchain.script import *
 from crypto.key import *
 from crypto.mining import *
 
-from ktc_constants import MIN_BITS, GENESIS_HASH
+from ktc_constants import MAX_BITS, GENESIS_HASH
 
 
 # ScriptSig (Coinbase; can be anything)
@@ -40,9 +40,9 @@ coinbase_tx = Transaction(
 unmined_block = Block(
     version=1,
     prev_block=GENESIS_HASH,
-    merkle_root=MerkleTree([coinbase_tx.hash()]).get_merkle_root(),
+    merkle_root=MerkleTree([coinbase_tx.hash()]).root(),
     timestamp=int(time.time()),
-    bits=MIN_BITS,  # LOWEST_BITS,
+    bits=MAX_BITS,  # LOWEST_BITS,
     nonce=0,
     tx_hashes=[coinbase_tx.hash()],
     transactions=[coinbase_tx],

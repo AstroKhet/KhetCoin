@@ -16,7 +16,8 @@ class MessageEnvelope:
 
         message_class = COMMAND_MAP.get(self.command)
         if not message_class:
-            raise ValueError(f"Unkown command: {self.command.decode('ascii')}")
+            log.warning(f"Received message with unknown command!: {self.command.decode('ascii')}")
+            raise ValueError
 
         self.message = message_class.parse(self.payload_stream)
 

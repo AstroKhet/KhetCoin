@@ -1,3 +1,8 @@
+"""
+Database constants for supporting all blockchain storage and caching functionalities
+These should neither be configurable nor seen by the user normally.
+"""
+
 import lmdb
 import os
 
@@ -28,7 +33,7 @@ with LMDB_ENV.begin(write=True) as txn:
     HEIGHT_DB = LMDB_ENV.open_db(b"height", txn=txn, create=True)
     TX_DB = LMDB_ENV.open_db(b"transaction", txn=txn, create=True)
     UTXO_DB = LMDB_ENV.open_db(b"utxo", txn=txn, create=True)
-    WALLET_DB = LMDB_ENV.open_db(b"addr", txn=txn, create=True, dupsort=True)
+    ADDR_DB = LMDB_ENV.open_db(b"addr", txn=txn, create=True, dupsort=True)
 
 
 # BLOCKS
@@ -37,7 +42,7 @@ with LMDB_ENV.begin(write=True) as txn:
 #        offset: 4B
 #        full block size: 4B
 #        timestamp: 4B
-#        no txns: 4B
+#        no txs: 4B
 #        total sent: 8B
 #        fee: 8B
 #        height: VI
@@ -57,6 +62,6 @@ with LMDB_ENV.begin(write=True) as txn:
 # Key: Tx Hash (32L) + Index (4L)
 # Value: Full Transaction Output
 
-# WALLET (Duplicate Keys)
+# ADDR (Duplicate Keys)
 # Key: Pubkey Hash (20B)
 # Value: Tx Hash (32L) + Index (4L)

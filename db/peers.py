@@ -1,63 +1,8 @@
 import aiosqlite
-import sqlite3
 
-from ktc_constants import PEERS_SQL, PEER_INACTIVE_TIMEOUT, MAX_PEERS
 from networking.constants import GETADDR_LIMIT
 from utils.ip import format_ip
-
-
-PEERS_COLS = [
-    ("ip", "TEXT PRIMARY KEY"),
-    ("port", "INTEGER"),
-    ("last_seen", "INTEGER"),
-    ("services", "INTEGER"),
-    ("name", "TEXT"),
-    ("ban_score", "INTEGER DEFAULT 0"),
-]
-
-def create_peers_table():
-    """Creates the peers table. Should be used ONLY in utils.setup:INITIAL_SETUP"""
-    con = sqlite3.connect(PEERS_SQL)
-    cur = con.cursor()
-
-    cols = ",\n    ".join(f"{field} {sql_type}" for field, sql_type in PEERS_COLS)
-    sql = f"CREATE TABLE IF NOT EXISTS peers (\n    {cols}\n);"
-    cur.execute(sql)
-
-    con.commit()
-    con.close()
-
-
-async def check_if_peer_exists(ip: bytes | str) -> bool:
-    if isinstance(ip, bytes):
-        ip = format_ip(ip)
-
-    async with aiosqlite.connect(PEERS_SQL) as db:
-        async with db.execute(
-            "SELECT EXISTS(SELECT 1 FROM peers WHERE ip = ?)",
-            (ip,)
-        ) as cur:
-            res = await cur.fetchone()
-            if res:
-                return bool(res[0])
-            return False
-
-
-async def change_ban_score_by(ip: str | bytes, delta: int = 0) -> None:
-    if isinstance(ip, bytes):
-        ip = format_ip(ip)
-
-    async with aiosqlite.connect(PEERS_SQL) as db:
-        await db.execute(
-            """
-            UPDATE peers
-            SET ban_score = MAX(ban_score + ?, 0)
-            WHERE ip = ?
-            """,
-            (delta, ip),
-        )
-        await db.commit()
-
+from utils.config import APP_CONFIG
 
 async def save_peer_from_addr(addr: tuple):
     """
@@ -73,7 +18,7 @@ async def save_peer_from_addr(addr: tuple):
     ip = format_ip(ip)
     
     # Insert if ip does not exist, otherwise ignore
-    async with aiosqlite.connect(PEERS_SQL) as db:
+    async with aiosqlite.connect(APP_CONFIG.get("path", "peers")) as db:
         await db.execute(
             """
             INSERT OR IGNORE INTO peers (ip, port, last_seen, services)
@@ -85,20 +30,29 @@ async def save_peer_from_addr(addr: tuple):
 
 
 async def load_peers():
-    async with aiosqlite.connect(PEERS_SQL) as db:
+    """
+	"id"	INTEGER,
+	"name"	TEXT,
+	"ip"	TEXT,
+	"port"	INTEGER,
+	"added"	INTEGER,
+	"last_seen"	INTEGER,
+	"ban_score"	INTEGER DEFAULT 0,
+    )"""
+    async with aiosqlite.connect(APP_CONFIG.get("path", "peers")) as db:
         async with db.execute(
-            "SELECT * FROM peers ORDER BY RANDOM() LIMIT ?", (MAX_PEERS, )
+            "SELECT * FROM peers ORDER BY RANDOM() LIMIT ?", (APP_CONFIG.get("node", "max_peers"),)
         ) as cur:
             peers = await cur.fetchall()
     return peers
 
 
 async def get_active_peers(limit=GETADDR_LIMIT):
-    """Randomly chooses peers with last_seen less than `PEER_INACTIVE_TIMEOUS` seconds ago, up to `limit`"""
+    """Randomly chooses peers with last_seen less than `cfg:peer_inactive_timeout` seconds ago, up to `limit`"""
     
-    async with aiosqlite.connect(PEERS_SQL) as db:
+    async with aiosqlite.connect(APP_CONFIG.get("path", "peers")) as db:
         async with db.execute(
-            "SELECT * FROM peers WHERE last_seen > ? ORDER BY RANDOM() LIMIT ?", (PEER_INACTIVE_TIMEOUT, limit)
+            "SELECT * FROM peers WHERE last_seen > ? ORDER BY RANDOM() LIMIT ?", (APP_CONFIG.get("node", "peer_inactive_timeout"), limit)
         ) as cur:
             peers = await cur.fetchall()
             return peers

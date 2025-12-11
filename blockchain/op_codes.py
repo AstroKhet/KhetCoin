@@ -57,8 +57,11 @@ def op_checksig(stack: List[bytes | int], msg_hash: bytes) -> bool:
     sig, sighash_type = sig_full[:-1], sig_full[-1]
     # sighash_type will be used in the future... maybe...
 
-    valid_sig = verify_signature(sig, msg_hash, pubkey_bytes, hasher=None)
-    stack.append(int(valid_sig))
+    try:
+        valid_sig = verify_signature(sig, msg_hash, pubkey_bytes, hasher=HASH256)
+        stack.append(int(valid_sig))
+    except ValueError:
+        return False
 
     return True
 

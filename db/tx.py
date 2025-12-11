@@ -3,14 +3,14 @@ import os
 from io import BytesIO
 
 from dataclasses import dataclass
-from db.block import get_block_hash_at_height, get_block_metadata, get_block_timestamp
+from db.block import get_block_hash_at_height, get_block_metadata
 from db.constants import LMDB_ENV, TX_DB
 from utils.helper import bytes_to_int, read_varint
 from utils.config import APP_CONFIG
 
 @dataclass
 class TransactionMetadata:
-    txn_hash: bytes
+    tx_hash: bytes
     dat_no: int
     offset: int
     size: int
@@ -19,7 +19,7 @@ class TransactionMetadata:
     
     
     
-def get_txn(tx_hash: bytes) -> bytes |  None:
+def get_tx(tx_hash: bytes) -> bytes |  None:
     """
     Returns the full serialized transaction corresponding to `tx_hash`
     """
@@ -39,7 +39,7 @@ def get_txn(tx_hash: bytes) -> bytes |  None:
     
         return stream.read(tx_size)
 
-def get_txn_metadata(tx_hash: bytes) -> TransactionMetadata | None:
+def get_tx_metadata(tx_hash: bytes) -> TransactionMetadata | None:
     with LMDB_ENV.begin(db=TX_DB) as db:
         value = db.get(tx_hash)
         if value is None:
@@ -51,7 +51,7 @@ def get_txn_metadata(tx_hash: bytes) -> TransactionMetadata | None:
         height = read_varint(BytesIO(value[16:]))
         
         return TransactionMetadata(
-            txn_hash=tx_hash,
+            tx_hash=tx_hash,
             dat_no=dat_no,
             offset=offset,
             size=tx_size,
@@ -59,19 +59,19 @@ def get_txn_metadata(tx_hash: bytes) -> TransactionMetadata | None:
             height=height
         )
         
-def get_txn_height(tx_hash: bytes) -> int | None:
-    meta = get_txn_metadata(tx_hash)
+def get_tx_height(tx_hash: bytes) -> int | None:
+    meta = get_tx_metadata(tx_hash)
     if meta is not None:
         return meta.height
     return None
 
 
-def get_txn_timestamp(tx_hash: bytes) -> int | None:
-    meta = get_txn_metadata(tx_hash)
+def get_tx_timestamp(tx_hash: bytes) -> int | None:
+    meta = get_tx_metadata(tx_hash)
     if meta is not None:
-        if blk_hash := get_block_hash_at_height(meta.height):
-            if blk_meta := get_block_metadata(blk_hash):
-                return blk_meta.timestamp
+        if block_hash := get_block_hash_at_height(meta.height):
+            if block_meta := get_block_metadata(block_hash):
+                return block_meta.timestamp
     return None
 
 

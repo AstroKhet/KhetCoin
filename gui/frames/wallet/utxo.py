@@ -3,8 +3,7 @@ from tkinter import ttk
 
 from datetime import datetime
 
-from blockchain.transaction import get_utxo_addr_value
-from db.utxo import get_utxo_set
+from db.addr import get_addr_utxos, get_addr_utxos_value
 from ktc_constants import KTC
 from networking.node import Node
 from utils.fmt import truncate_bytes
@@ -17,9 +16,9 @@ class UTXOFrame(tk.Frame):
         self.node = node
         
         # Default is sort by value desc
-        self.utxo_set = get_utxo_set(self.node.pk_hash)
+        self.utxo_set = get_addr_utxos(self.node.pk_hash)
         self.utxo_set.sort(key=lambda utxo: utxo.value, reverse=True)
-        self.balance = get_utxo_addr_value(self.node.pk_hash)
+        self.balance = get_addr_utxos_value(self.node.pk_hash)
 
         self.frame_balance_container = tk.Frame(self)
         self.frame_balance_container.pack(fill="x", pady=(10, 5))
@@ -92,7 +91,7 @@ class UTXOFrame(tk.Frame):
             label_utxo_from = tk.Label(frame_info_line, text="FROM", font=("Segoe UI", 8), fg="gray", bg="white")
             label_utxo_from.pack(side="left")
 
-            label_utxo_hash = tk.Label(frame_info_line, text=truncate_bytes(utxo.txn_hash), font=("Courier", 10), bg="white")
+            label_utxo_hash = tk.Label(frame_info_line, text=truncate_bytes(utxo.tx_hash), font=("Courier", 10), bg="white")
             label_utxo_hash.pack(side="left", padx=5)
 
             label_utxo_id_text = tk.Label(frame_info_line, text=f"ID {utxo.index}", font=("Segoe UI", 8), fg="gray", bg="white")

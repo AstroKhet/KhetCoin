@@ -3,11 +3,13 @@ import logging
 import random
 import time
 from typing import Optional, Set, Tuple
+from requests import get
 
 from crypto.hashing import HASH160
 from crypto.key import get_public_key
-from utils.helper import str_ip
-from ktc_constants import MAX_PEERS
+from mining.miner import Miner
+from networking.messages.types.mempool import MempoolMessage
+from utils.config import APP_CONFIG
 
 from networking.constants import CONNECTION_TIMEOUT, HANDSHAKE_TIMEOUT
 from networking.messages.envelope import MessageEnvelope
@@ -34,6 +36,7 @@ class Node:
         self.server_start_time: int = 0
         self.loop = loop
         self.mempool = Mempool()
+        self.miner = Miner()
 
         # Clients (peers)
         self.next_peer_id: int = 0
@@ -48,9 +51,9 @@ class Node:
         self._shutdown_requested = asyncio.Event()
         self._tasks: Set[asyncio.Task] = set()
         
+        self.is_running = False
         # Transient variables for efficient GUI update
-        self._updated_peers = False
-
+        self._updated_peers = 0
         log.info(f"Node '{self.name}' initialized on {self.host}:{self.port}")
 
     async def start_server(self):
@@ -67,7 +70,12 @@ class Node:
             self.server = None
             self._shutdown_requested.set()
 
+        self.is_running = True
+        
     async def close_server(self):
+        self.is_running = False
+        self.server_start_time = 0
+        
         awaitables = []
 
         if self.server:
@@ -80,21 +88,18 @@ class Node:
 
         peers_to_close = list(self.peers)
         self.peers.clear()
-        self._updated_peers = True
+        self._updated_peers = 0
 
         for peer in peers_to_close:
             awaitables.append(peer.close())
 
         for task in tasks_to_cancel:
-            if not task.done():
-                task.cancel()
+            task.cancel()
             awaitables.append(task)
+                
+        await asyncio.gather(*awaitables, return_exceptions=True)
 
-        if awaitables:
-            await asyncio.gather(*awaitables, return_exceptions=True)
-
-        self.server_start_time = 0
-
+        
     async def run(self):
         log.info(f"Node starting...")
         self._shutdown_requested.clear()
@@ -117,24 +122,30 @@ class Node:
         self.add_task(peer_rotation_task)
 
         log.info(f"[{self.name}] Node running. Waiting for shutdown signal...")
+        self.is_running = True
         await self._shutdown_requested.wait()
 
         log.info(f"[{self.name}] Shutdown requested. Cleaning up...")
         await self._shutdown_tasks()
         log.info(f"[{self.name}] Node finished.")
 
-    async def connect_to_peer(self, addr: tuple, name: str = ""):
-        peer_str_ip = str_ip(addr, name)
-        if len(self.peers) >= MAX_PEERS:
+    async def connect_to_peer(self, addr: tuple, name: str = "", initial=False):
+        peer_str_ip = f"{addr[0]}:{addr[1]}"
+        if addr == (self.host, self.port):
+            log.warning("Attempted to self connect.")
+            return
+        
+        if len(self.peers) >= APP_CONFIG.get("node", "max_peers"):
             return
 
         log.info(f"[{self.name}] Attempting TCP connection to {peer_str_ip}...")
-        reader, writer = None, None
+        reader = writer = None
         try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(addr[0], addr[1]), timeout=CONNECTION_TIMEOUT
-            )
+            reader, writer = await asyncio.wait_for(asyncio.open_connection(addr[0], addr[1]), timeout=CONNECTION_TIMEOUT)
             log.info(f"[{self.name}] TCP connection established with {peer_str_ip}. Starting handshake...")
+        except ConnectionRefusedError:
+            log.info(f"{peer_str_ip} - connection refused.")
+            return
         except Exception as e:
             log.exception(f"[{self.name}] Unexpected error connecting TCP to {peer_str_ip}: {e}")
             return
@@ -153,7 +164,11 @@ class Node:
             )
             if established:
                 self.peers.add(peer)
-                self._updated_peers = True
+                self._updated_peers = 0
+                
+                if initial:
+                    log.info(f"[{self.name}] mempool message sent")
+                    self.add_task(asyncio.create_task(peer.send_message(MempoolMessage())))
             else:
                 log.warning(f"[{self.name}] Handshake failed with peer {peer.str_ip}.")
         except Exception as e:
@@ -163,7 +178,7 @@ class Node:
     def broadcast(self, 
         message: MessageEnvelope, 
         exclude: Optional[Peer] = None,
-        sample: int = MAX_PEERS,
+        sample: int = APP_CONFIG.get("node", "max_peers"),
         outbound: bool = False
     ):
         target_peers = list(self.peers)
@@ -186,17 +201,17 @@ class Node:
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ):
         # Get peer address
-        peer_addr_info = writer.get_extra_info("peername", ("Unknown", 0))
-        peer_str_ip = str_ip(peer_addr_info)
+        addr = writer.get_extra_info("peername", ("Unknown", 0))
+        peer_str_ip = f"{addr[0]}:{addr[1]}"
         log.debug(f"[{self.name}] Handling incoming connection from {peer_str_ip}")
 
         # Check if its possible to connect with peer
-        if len(self.peers) >= MAX_PEERS:
+        if len(self.peers) >= APP_CONFIG.get("node", "max_peers"):
             writer.close()
             await writer.wait_closed()
             return
 
-        if any(p.addr == peer_addr_info for p in self.peers):
+        if any(p.addr == addr for p in self.peers):
             writer.close()
             await writer.wait_closed()
             return
@@ -228,7 +243,7 @@ class Node:
             if established:
                 log.info(f"[{self.name}] Handshake successful with incoming peer {peer.str_ip}. Adding to peers.")
                 self.peers.add(peer)
-                self._updated_peers = True
+                self._updated_peers = 0
             else:
                 log.warning(f"[{self.name}] Handshake failed or rejected by incoming peer {peer.str_ip} (established=False).")
         
@@ -264,10 +279,10 @@ class Node:
         if not peers_to_connect:
             return 
 
-        for ip, port, name, *_ in peers_to_connect:
+        for _, name, ip, port, *_ in peers_to_connect:
             self.add_task(
                 asyncio.create_task(
-                    self.connect_to_peer((ip, port), name)
+                    self.connect_to_peer((ip, port), name, initial=True)
                 )
             )
 
@@ -280,6 +295,8 @@ class Node:
         def task_done(task: asyncio.Task):
             try:
                 task.result()  # This re-raises if the task had an exception
+            except asyncio.CancelledError:
+                pass
             except Exception as e:
                 log.error(f"Task failed: {e}")
             finally:
@@ -298,19 +315,19 @@ class Node:
     def remove_peer(self, peer: Peer):
         self.peers.discard(peer)
         self.peer_id_lookup.pop(peer.session_id)
-        self._updated_peers = True
+        self._updated_peers = 0
         log.info(f"Peer No. {peer.session_id} disconnected.")
 
     def get_peer_by_id(self, peer_id: int) -> Peer | None:
         return self.peer_id_lookup.get(peer_id)
         
-    def check_updated_peers(self):
+    def check_updated_peers(self, i=1):
         """
-        Checks if any transactions were added or removd from self.peers
-        from the last time this function was called
+        Checks if any transactions were added or removd from self.peers from the last time this function was called.
+        \n`i` is used as an ID for different frames.
         """
-        updated = self._updated_peers
-        self._updated_peers = False
+        updated = (self._updated_peers >> i) & 1
+        self._updated_peers &= ~(1 << i)
         return updated
     
     @property
@@ -322,5 +339,4 @@ class Node:
 
     @property
     def public_ip_addr(self) -> str:
-        from requests import get
         return get("https://api.ipify.org").content.decode("utf8")
