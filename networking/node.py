@@ -93,9 +93,10 @@ class Node:
 
             log.info(f"Server listening on {addr}")
         except Exception as e:
-            log.exception(f"Error starting server: {e}")
-            self.server = None
-            self._shutdown_requested.set()
+            msg = str(e)
+            if "ConflictInMappingEntry" not in msg and "Success" not in msg:
+                log.warning(f"UPnP port forwarding failed: {e}")
+                return None
 
         self.is_running = True
         
