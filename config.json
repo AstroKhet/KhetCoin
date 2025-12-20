@@ -25,7 +25,7 @@
             "configurable": true
         },
         "initial_setup": {
-            "value": true,
+            "value": false,
             "type": "bool",
             "description": "If the user has setup Khetcoin App already.",
             "unit": null,
