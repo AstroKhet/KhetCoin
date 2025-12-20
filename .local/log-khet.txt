@@ -1,7 +1,0 @@
-2025-12-20 16:13:28,971 - INFO - miner.py - Miner initiated.
-2025-12-20 16:13:28,971 - INFO - node.py - Node 'Khet' initialized on 127.0.0.1:8888
-2025-12-20 16:13:29,071 - INFO - app.py - KhetcoinApp successfully started
-2025-12-20 16:13:32,896 - INFO - node.py - External shutdown triggered.
-2025-12-20 16:13:32,896 - INFO - miner.py - Miner shutdown initiated.
-2025-12-20 16:13:32,897 - INFO - miner.py - All miner processes terminated.
-2025-12-20 16:13:32,926 - INFO - app.py - KhetCoin App shutdown complete.
