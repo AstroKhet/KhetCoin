@@ -7,15 +7,15 @@ from blockchain.block import Block
 from blockchain.transaction import Transaction
 
 from crypto.hashing import HASH256
-from db.block import get_block_exists, get_block_height_at_hash, get_raw_block, get_raw_header
-from db.functions import connect_block, reorg_blockchain, save_block_data
-from db.height import get_block_hash_at_height
+from db.block import get_block_exists, get_block_height_at_hash, get_block_locator_hashes, get_raw_block, get_raw_header
+from db.functions import connect_block, process_new_block, reorg_blockchain, save_block_data
+from db.height import get_block_hash_at_height, get_blockchain_height
 from db.index import BlockIndex, get_block_index
 from db.tx import get_tx_exists, get_tx
 
 from db.peers import load_all_active_peers, save_peer_from_addr
 
-from networking.constants import BLOCK_TYPE, GETADDR_LIMIT, GETBLOCKS_LIMIT, GETHEADERS_LIMIT, TX_TYPE
+from networking.constants import BLOCK_TYPE, GETADDR_LIMIT, GETBLOCKS_LIMIT, GETHEADERS_LIMIT, PROTOCOL_VERSION, TX_TYPE
 from networking.messages.envelope import MessageEnvelope
 from networking.messages.types import *
 from networking.peer import Peer
@@ -53,7 +53,7 @@ class MessageProcessor:
         peer.version = msg.version
         peer.services = msg.services
         peer.user_agent = msg.user_agent
-        peer.start_height = msg.start_height
+        peer.height = msg.start_height
         peer.relay = msg.relay
 
         # Basic Validation 
@@ -64,6 +64,7 @@ class MessageProcessor:
         # 3. Send verack
         verack_envelope = MessageEnvelope(b"verack")
         await peer.send_message(verack_envelope)
+
 
     async def process_verack(self, peer: Peer, msg: VerackMessage):
         if not peer.established.done():
@@ -213,6 +214,7 @@ class MessageProcessor:
         for block_hash in locator_hashes:
             if get_block_exists(block_hash):
                 common_hash = block_hash
+                break
 
         if common_hash is None:
             return
@@ -220,6 +222,7 @@ class MessageProcessor:
         curr_height = get_block_height_at_hash(common_hash)
         if curr_height is None:
             return
+        
         block_hashes = []
         while len(block_hashes) < GETBLOCKS_LIMIT:
             curr_hash = get_block_hash_at_height(curr_height)
@@ -244,7 +247,6 @@ class MessageProcessor:
         block_raw = msg.block
         block = Block.parse(BytesIO(block_raw))
 
-        
         # 0.1 Block already seen & saved
         if get_block_exists(block.hash()):
             return
@@ -253,27 +255,13 @@ class MessageProcessor:
         if not get_block_exists(block.prev_block):
             self.node.orphan_blocks.append(block)
             return
-
-        # 0.3 Verify block
-        if not block.verify():
-            return
         
         # 1. Now we know that the block is valid and extends off the blockchain DAG somewhere
-        save_block_data(block)
-
-        block_index = get_block_index(block.hash())
-
-        # 1.1 Block extends active chain
-        if block.prev_block == self.node.block_tip_index.hash:
-            connect_block(block, self.node)
-            
-        # 2. Block extends forked chain
-        else:
-            if block_index.chainwork > self.node.block_tip_index.chainwork:
-                reorg_blockchain(self.node.block_tip_index, block_index, self.node)
-            else:
-                # Nothing happens
-                pass
+        process_new_block(block, self.node)
+        
+        # 2. If the block is successfully verified & saved, this tells us that the peer is at least at that block's height
+        if index := get_block_index(block.hash()):
+            peer.height = index.height
 
 
 

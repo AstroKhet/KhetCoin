@@ -4,7 +4,7 @@ import logging
 
 from blockchain.block import Block
 from crypto.hashing import HASH256
-from db.block import get_block_dat_no, get_block_height_at_hash, get_raw_block
+from db.block import get_block_dat_no, get_block_exists, get_block_height_at_hash, get_raw_block
 from db.constants import BLOCK_MAGIC, BLOCKS_DB, DAT_SIZE, INDEX_DB, LMDB_ENV, TX_DB
 from db.height import delete_height, get_blockchain_height, save_height
 from db.index import BlockIndex, generate_block_index, get_block_index, get_fork_index
@@ -17,6 +17,33 @@ log = logging.getLogger(__name__)
 BLOCKCHAIN_DIR = APP_CONFIG.get("path", "blockchain")
 
 
+def process_new_block(block, node):
+    if not block.verify():
+        return
+    
+    save_block_data(block)
+    
+    block_index = get_block_index(block.hash())
+
+    # 1.1 Block extends active chain
+    if block.prev_block == node.block_tip_index.hash:
+        connect_block(block, node)
+        
+    # 2. Block extends forked chain
+    else:
+        if block_index.chainwork > node.block_tip_index.chainwork:
+            reorg_blockchain(node.block_tip_index, block_index, node)
+        else:
+            # Nothing happens
+            pass
+        
+    for i in range(len(node.orphan_blocks) - 1, -1, -1):
+        o_block = node.orphan_blocks[i]
+        if get_block_exists(o_block.prev_block):
+            del node.orphan_blocks[i]
+            process_new_block(o_block)
+
+        
 def connect_block(block: Block, node):
     """Extends `block` to the active blockchain
     
@@ -43,9 +70,10 @@ def connect_block(block: Block, node):
     append_tx_history(block, node.pk_hash)
     
     # 5. Set as blockchain tip 
-    
     node.set_tip(block_index)
-               
+    
+    # 6. Deal with orphans.
+
 
 def disconnect_block(block: Block, node):
     """

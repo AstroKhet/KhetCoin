@@ -1,5 +1,6 @@
 import tkinter as tk
 from datetime import timedelta
+from tkinter import messagebox
 from gui.colours import BTN_CONFIG_GRAY, BTN_START_GREEN, BTN_STOP_RED, colour_pattern_gen
 from networking.node import Node
 from utils.config import APP_CONFIG
@@ -63,7 +64,7 @@ class NodeFrame(tk.Frame):
 
         # Server uptime
         tk.Label(frame_right, text="Server uptime:", anchor="w").grid(row=1, column=0, sticky="w", padx=5, pady=2)
-        self.label_uptime = tk.Label(frame_right, text=f"{timedelta(seconds=self.node.uptime)}", anchor="w", padx=5)
+        self.label_uptime = tk.Label(frame_right, text=f"{timedelta(seconds=self.node.uptime())}", anchor="w", padx=5)
         self.label_uptime.grid(row=1, column=1, sticky="w", padx=5, pady=2)
 
         # Number of peers
@@ -94,6 +95,9 @@ class NodeFrame(tk.Frame):
         
     def _toggle_server_switch(self):
         if self.btn_server.cget("text") == "Start Node":
+            if self.node.external_ip == "0.0.0.0":
+                messagebox.showerror("Invalid IP", "Your IP port was not forwarded properly.")
+                return
             self.controller.start_node()
             self.btn_server.config(text="Shutdown Node", bg="#dc3545")
         else:
@@ -105,7 +109,7 @@ class NodeFrame(tk.Frame):
         if not self._is_active:
             return
         
-        self.label_uptime.configure(text=str(timedelta(seconds=self.node.uptime)))
+        self.label_uptime.configure(text=str(timedelta(seconds=self.node.uptime())))
         self.label_peers.configure(text=str(len(self.node.peers)))
         self.label_data_sent.configure(text=format_bytes(self.node.bytes_sent))
         self.label_data_received.configure(text=format_bytes(self.node.bytes_recv))

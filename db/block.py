@@ -6,7 +6,7 @@ from pathlib import Path
 from db.constants import *
 
 from db.height import get_block_hash_at_height, get_blockchain_height
-from ktc_constants import HIGHEST_TARGET, ONE_DAY, RETARGET_INTERVAL
+from ktc_constants import GENESIS_HASH, HIGHEST_TARGET, ONE_DAY, RETARGET_INTERVAL
 from utils.helper import bits_to_target, bytes_to_int, int_to_bytes
 from utils.config import APP_CONFIG
 
@@ -178,5 +178,19 @@ def calculate_block_target(height: int) -> int | None:
         return max(prev_target // 4, min(new_target, prev_target * 4))
 
 
-
+def get_block_locator_hashes():
+    locator = []
+    height = get_blockchain_height()
+    step = 1
+    
+    while height >= 0:
+        locator.append(get_block_hash_at_height(height))
+        if len(locator) >= 10:
+            step *= 2
+        height -= step
+        
+    if locator[-1] != GENESIS_HASH:
+        locator.append(GENESIS_HASH)
+    
+    return locator
     

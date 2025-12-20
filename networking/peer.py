@@ -51,12 +51,7 @@ class Peer:
         self.direction = direction
         self.time_created: int = int(time.time())
 
-        # TODO Status flags
-        ## Might need this to flag that I am awaiting for continuous data from this peer
-        ## i.e. block with n txs -> tx1 -> tx2 -> ... -> tx
-        
         # Tracking
-        ## Timestamps in miliseconds
         self._last_block: int | None = None
         self._last_tx: int | None = None
         self._last_send_timestamp: int | None = None
@@ -68,7 +63,7 @@ class Peer:
         # Ping / Latency tests
         self.time_offset = 0
         self.pong_future = asyncio.Future()
-        self.latest_ping_time = None
+        self.latest_ping_time_ms = None
         self.ping_times: List[float] = []
         self.ping()
 
@@ -76,7 +71,7 @@ class Peer:
         self.version: int = 0
         self.services: int = 0
         self.user_agent: bytes = b""
-        self.start_height: int = 0
+        self.height: int = 0
         self.relay: bool = False
 
         # asyncio variables
@@ -221,8 +216,8 @@ class Peer:
         await self.send_message(envelope)
 
         time_pong_received = await asyncio.wait_for(self.pong_future, timeout=PING_TIMEOUT)
-        self.latest_ping_time = int((time_pong_received - time_ping_sent) * 1000)
-        self.ping_times.append(self.latest_ping_time)
+        self.latest_ping_time_ms = int((time_pong_received - time_ping_sent) * 1000)
+        self.ping_times.append(self.latest_ping_time_ms)
 
     @property
     def connection_time(self) -> int:

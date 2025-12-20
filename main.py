@@ -1,7 +1,8 @@
-from setup.initializer import init_folders, init_font
-from setup.functions import INITIAL_SETUP, RUNTIME_SETUP
+
 
 def main():
+    from setup.initializer import init_folders, init_font
+    from setup.functions import RUNTIME_SETUP
     from utils.config import APP_CONFIG
 
     if not APP_CONFIG.get("app", "initial_setup"):

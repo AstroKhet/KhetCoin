@@ -1,4 +1,9 @@
 import ipaddress
+import miniupnpc
+
+import logging
+
+log = logging.getLogger(__name__)
 
 
 def str_ip(addr: tuple, name="") -> str:
@@ -48,3 +53,20 @@ def is_routable(ip_bytes: bytes | str | int) -> bool:
         and not ip.is_link_local
         and not ip.is_unspecified
     )
+
+def setup_port_forwarding(port, name):
+    try:
+        upnp = miniupnpc.UPnP()
+        upnp.discoverdelay = 200
+        upnp.discover()
+        upnp.selectigd()
+        upnp.addportmapping(
+            port, "TCP",
+            upnp.lanaddr, port,
+            f"{name}'s Node", ""
+        )
+    except Exception as e:
+        log.warning(f"UPnP port forwarding failed: {e}")
+        return None
+
+    return upnp.externalipaddress()

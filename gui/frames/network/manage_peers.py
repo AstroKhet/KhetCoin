@@ -139,7 +139,7 @@ class ManagePeersFrame(tk.Frame):
                 peer.user_agent.decode(),
                 peer.direction.title(),
                 format_age(int(time.time() )- peer.time_created),
-                peer.latest_ping_time or "N/A",
+                peer.latest_ping_time_ms or "N/A",
             )
             
             if str(peer.session_id) in tree_peers_iids:
@@ -191,7 +191,7 @@ class ManagePeersFrame(tk.Frame):
             "Services": f"{peer.services} # into text",
             "Version": peer.version,
             "Transaction Relay": "Yes" if peer.relay else "No",
-            "Starting Block": peer.start_height,
+            "Starting Block": peer.height,
             "Synced Headers": "# snyced headers",
             "Synced Blocks": "# Synced blocks",
             "Connection Time": f"{timedelta(seconds=peer.connection_time)}",
@@ -201,7 +201,7 @@ class ManagePeersFrame(tk.Frame):
             "Last Receive": f"{peer.last_recv}s" if peer.last_recv else "Never",
             "Sent": format_bytes(peer.bytes_sent),
             "Received": format_bytes(peer.bytes_recv),
-            "Ping Time": f"{peer.latest_ping_time} ms",
+            "Ping Time": f"{peer.latest_ping_time_ms} ms",
             "Ping Wait": "## if still pending ping else N/A",
             "Min Ping": "N/A" if not peer.ping_times else f"{min(peer.ping_times)} ms",
             "Time Offset": "version msg",
