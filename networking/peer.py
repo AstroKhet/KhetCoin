@@ -5,6 +5,7 @@ import time
 from typing import List
 
 from db.height import get_blockchain_height
+from db.peers import set_last_seen
 from networking.constants import PING_TIMEOUT, USER_AGENT
 from networking.constants import PROTOCOL_VERSION, SERVICES
 from networking.messages.envelope import MessageEnvelope
@@ -58,8 +59,8 @@ class Peer:
         ## Timestamps in miliseconds
         self._last_block: int | None = None
         self._last_tx: int | None = None
-        self._last_send: int | None = None
-        self._last_recv: int | None = None
+        self._last_send_timestamp: int | None = None
+        self._last_recv_timestamp: int | None = None
 
         self.bytes_recv: int = 0
         self.bytes_sent: int = 0
@@ -121,11 +122,11 @@ class Peer:
             # Tracking
             self.bytes_sent += len(serialized_envelope)
             self.node.bytes_sent += len(serialized_envelope)
-            self._last_send = int(time.time())
+            self._last_send_timestamp = int(time.time())
             if isinstance(envelope.message, BlockMessage):
-                self._last_block = self._last_send
+                self._last_block = self._last_send_timestamp
             elif isinstance(envelope.message, TxMessage):
-                self._last_tx = self._last_send
+                self._last_tx = self._last_send_timestamp
 
             log.info(f"[{self.str_ip}] Sent message: {cmd} ({len(serialized_envelope)} bytes)")
         except Exception as e:
@@ -170,12 +171,13 @@ class Peer:
 
             self.bytes_recv += envelope.payload_size
             self.node.bytes_recv += envelope.payload_size
-            self._last_recv = int(time.time())
+            self._last_recv_timestamp = int(time.time())
+            await set_last_seen(self.ip, self.port, self._last_recv_timestamp)
 
             if isinstance(envelope.message, BlockMessage):
-                self._last_block = self._last_recv
+                self._last_block = self._last_recv_timestamp
             elif isinstance(envelope.message, TxMessage):
-                self._last_tx = self._last_recv
+                self._last_tx = self._last_recv_timestamp
 
             try:
                 await self.node.processor_queue.put((self, envelope))
@@ -188,7 +190,6 @@ class Peer:
         log.info(f"[{self.str_ip}] Listener task stopped.")
         await self.close()
 
-    # TODO: deai
     async def close(self):
         log.info(f"[{self.str_ip}] Closing connection...")
         if self.listen_task and not self.listen_task.done():
@@ -202,7 +203,6 @@ class Peer:
         except Exception as e:
             log.warning(f"[{self.str_ip}] Error closing writer; peer might have had an ungraceful shutdown.\n{e}")
         finally:
-            print(f"removing peer {self.session_id}...")
             self.node.remove_peer(self) 
         
     def ping(self):
@@ -242,14 +242,14 @@ class Peer:
 
     @property
     def last_send(self) -> int | None:  # Last time YOU sent to PEER
-        if self._last_send:
-            return int(time.time()) - self._last_send
+        if self._last_send_timestamp:
+            return int(time.time()) - self._last_send_timestamp
         return None
 
     @property
     def last_recv(self) -> int | None:  # Last time PEER sent to YOU
-        if self._last_recv:
-            return int(time.time()) - self._last_recv
+        if self._last_recv_timestamp:
+            return int(time.time()) - self._last_recv_timestamp
         return None
 
     def __hash__(self):

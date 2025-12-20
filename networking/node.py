@@ -1,35 +1,36 @@
 import asyncio
 import logging
+import miniupnpc
 import random
 import time
+
 from typing import Optional, Set, Tuple
-from requests import get
 
 from blockchain.block import Block
 from crypto.hashing import HASH160
 from crypto.key import get_public_key
 from db.index import BlockIndex, get_block_tip_index
+from db.peers import load_all_peers, load_peers
+from mining.mempool import Mempool
 from mining.miner import Miner
-from networking.messages.types.mempool import MempoolMessage
-from utils.config import APP_CONFIG
-
 from networking.constants import CONNECTION_TIMEOUT, HANDSHAKE_TIMEOUT
 from networking.messages.envelope import MessageEnvelope
+from networking.messages.types.getaddr import GetAddrMessage
+from networking.messages.types.mempool import MempoolMessage
 from networking.peer import Peer
 from networking.processor import MessageProcessor
-
-from mining.mempool import Mempool
-from db.peers import load_peers
+from utils.config import APP_CONFIG
 
 
 log = logging.getLogger(__name__)
 
 
 class Node:
-    def __init__(self, name: str, host: str = "0.0.0.0", port: int = 9333, loop=None):
+    def __init__(self, name: str, port: int = 8666, loop=None):
         self.name = name
-        self.host = host
         self.port = port
+        self.external_ip = self.setup_port_forwarding() or "0.0.0.0"
+        
         self.peers: Set[Peer] = set()
         self.pk_hash: bytes = HASH160(get_public_key(name, raw=True))
 
@@ -62,12 +63,30 @@ class Node:
         
         self._updated_blockchain = 0
         self._updated_peers = 0
-        log.info(f"Node '{self.name}' initialized on {self.host}:{self.port}")
+        log.info(f"Node '{self.name}' initialized on {self.external_ip}:{self.port}")
 
+    def setup_port_forwarding(self):
+        try:
+            upnp = miniupnpc.UPnP()
+            upnp.discoverdelay = 200
+            upnp.discover()
+            upnp.selectigd()
+
+            external_port = self.port
+            internal_port = self.port
+            protocol = 'TCP'
+
+            upnp.addportmapping(external_port, protocol, upnp.lanaddr, internal_port, f"MyNode-{self.name}", '')
+            log.info(f"Port {external_port} forwarded via UPnP to {upnp.lanaddr}:{internal_port}")
+            return upnp.externalipaddress()
+        except Exception as e:
+            log.warning(f"UPnP port forwarding failed: {e}")
+            return None
+        
     async def start_server(self):
         try:
             self.server = await asyncio.start_server(
-                self._handle_incoming_connection, self.host, self.port
+                self._handle_incoming_connection, "0.0.0.0", self.port
             )
             addr = self.server.sockets[0].getsockname()
             self.server_start_time = int(time.time())
@@ -126,7 +145,7 @@ class Node:
         connect_initial_task = asyncio.create_task(self._connect_initial_peers())
         self.add_task(connect_initial_task)
 
-        peer_rotation_task = asyncio.create_task(self._peer_rotation())
+        peer_rotation_task = asyncio.create_task(self._rotate_peers())
         self.add_task(peer_rotation_task)
 
         log.info(f"Node running. Waiting for shutdown signal...")
@@ -139,7 +158,7 @@ class Node:
 
     async def connect_to_peer(self, addr: tuple, name: str = "", initial=False):
         peer_str_ip = f"{addr[0]}:{addr[1]}"
-        if addr == (self.host, self.port):
+        if addr == (self.external_ip, self.port):
             log.warning("Attempted to self connect.")
             return
         
@@ -175,7 +194,7 @@ class Node:
                 self._updated_peers = 0
                 
                 if initial:
-                    log.info(f"mempool message sent")
+                    log.info(f"Mempool message sent")
                     self.add_task(asyncio.create_task(peer.send_message(MempoolMessage())))
             else:
                 log.warning(f"Handshake failed with peer {peer.str_ip}.")
@@ -256,6 +275,7 @@ class Node:
                 log.info(f"Handshake successful with incoming peer {peer.str_ip}. Adding to peers.")
                 self.peers.add(peer)
                 self._updated_peers = 0
+                await peer.send_message(GetAddrMessage())
             else:
                 log.warning(f"Handshake failed or rejected by incoming peer {peer.str_ip} (established=False).")
         
@@ -287,28 +307,31 @@ class Node:
 
     async def _connect_initial_peers(self):
         log.info("Connecting to initial peers...")
-        peers_to_connect = await load_peers()
+        peers_to_connect = await load_all_peers()[:APP_CONFIG.get("node", "max_peers")]
         if not peers_to_connect:
             return 
 
-        for _, name, ip, port, *_ in peers_to_connect:
+        for peer_id, name, ip, port, added, last_seen, services in peers_to_connect:
             self.add_task(
                 asyncio.create_task(
                     self.connect_to_peer((ip, port), name, initial=True)
                 )
             )
 
-    async def _peer_rotation(self):
+    async def _rotate_peers(self):
         timeout = APP_CONFIG.get("node", "peer_inactive_timeout")
-        
+
         while not self._shutdown_requested.is_set():
             now = time.time()
-            for peer in self.peers:
-                if now - time.timepeer.last_recv > timeout:
-                    self.remove_peer(peer)
-                     
-            asyncio.sleep(1)
             
+            # 1. Clear inactive peers
+            for peer in list(self.peers):
+                if now - peer.last_recv > timeout:
+                    self.remove_peer(peer)
+                    log.info(f"Removed inactive peer {peer}")
+                    
+            await asyncio.sleep(1)
+                
             
     def add_task(self, task: asyncio.Task):
         def task_done(task: asyncio.Task):
@@ -359,8 +382,6 @@ class Node:
     def set_tip(self, block_index):
         self.block_tip_index = block_index
         self._updated_blockchain = 0
-        
-
     
     @property
     def uptime(self) -> int:
@@ -368,7 +389,3 @@ class Node:
             return int(time.time()) - self.server_start_time
         else:
             return 0
-
-    @property
-    def public_ip_addr(self) -> str:
-        return get("https://api.ipify.org").content.decode("utf8")

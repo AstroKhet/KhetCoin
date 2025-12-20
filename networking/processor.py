@@ -13,13 +13,14 @@ from db.height import get_block_hash_at_height
 from db.index import BlockIndex, get_block_index
 from db.tx import get_tx_exists, get_tx
 
-from db.peers import get_active_peers, save_peer_from_addr
+from db.peers import load_all_active_peers, save_peer_from_addr
 
 from networking.constants import BLOCK_TYPE, GETADDR_LIMIT, GETBLOCKS_LIMIT, GETHEADERS_LIMIT, TX_TYPE
 from networking.messages.envelope import MessageEnvelope
 from networking.messages.types import *
 from networking.peer import Peer
 
+from utils.config import APP_CONFIG
 from utils.helper import encode_ip, int_to_bytes, int_to_bytes
 from utils.ip import is_routable
 
@@ -55,7 +56,7 @@ class MessageProcessor:
         peer.start_height = msg.start_height
         peer.relay = msg.relay
 
-        # Basic Validation (Example)
+        # Basic Validation 
         # TODO: Implement proper version negotiation and validation
         # if msg.version < 70000:  # Example: Reject very old protocol versions
         # await peer.close() # Optionally disconnect
@@ -106,7 +107,7 @@ class MessageProcessor:
 
     async def process_getaddr(self, peer: Peer, msg: GetAddrMessage):
         addresses = set()
-        for connected_peer in peer.node.peers:
+        for connected_peer in self.node.peers:
             if connected_peer.ip == peer.ip:
                 continue
 
@@ -119,32 +120,44 @@ class MessageProcessor:
             addresses.add(addr)
 
         # default limit = 8, chosen by random
-        active_peers = await get_active_peers(limit=GETADDR_LIMIT)
-        for ip, port, last_recv, services, *_ in active_peers:
-            addr = (
-                int_to_bytes(last_recv),
-                int_to_bytes(services, 8),
-                encode_ip(ip),
-                int_to_bytes(port, 2)
-            )
-            addresses.add(addr)
+        active_peers = await load_all_active_peers()
+        
+        if active_peers:
+            active_peers = active_peers[:GETADDR_LIMIT]
+            for peer_id, ip, port, added, last_seen, services in active_peers:
+                addr = (
+                    int_to_bytes(last_seen),
+                    int_to_bytes(services, 8),
+                    encode_ip(ip),
+                    int_to_bytes(port, 2)
+                )
+                addresses.add(addr)
 
-        addr_msg = AddrMessage(list(addresses))
-        await peer.send_message(addr_msg)
+            addr_msg = AddrMessage(list(addresses))
+            await peer.send_message(addr_msg)
 
     async def process_addr(self, peer: Peer, msg: AddrMessage):
         # Filter addresses
-        addresses = [addr for addr in msg.addresses if is_routable(addr[2])]
 
         # Process incoming addresses
-        for addr in addresses:
+        for addr in msg.addresses:
             # This trusts that other nodes are not sending bad data
             # Possible to implement aggregation to determine bad data
             save_peers_task = asyncio.create_task(save_peer_from_addr(addr))
             self.node.add_task(save_peers_task)
 
+        
+        if (vacancy := APP_CONFIG.get("node", "max_peers") - len(self.node.peers)) > 0:
+            for i in range(min(vacancy, len(msg.addresses))):
+                timestamp, services, ip, port = msg.addresses[i]
+                self.node.add_task(
+                    asyncio.create_task(
+                        self.node.connect_to_peer((ip, port), "Peer")
+                    )
+                )
+        
         # Relay addresses to 2 other random peers
-        addr_msg = AddrMessage(addresses)
+        addr_msg = AddrMessage(msg.addresses)
 
         await self.node.broadcast(
             message=addr_msg,

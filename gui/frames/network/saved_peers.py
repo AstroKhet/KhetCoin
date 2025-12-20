@@ -256,7 +256,7 @@ class SavedPeersFrame(tk.Frame):
 
         ttk.Label(win, text="Network Port:").grid(row=2, column=0, padx=10, pady=5, sticky="w")
         entry_port = ttk.Entry(win)
-        entry_port.insert(0, '8888')
+        entry_port.insert(0, '8666')
         entry_port.grid(row=2, column=1, padx=10, pady=5, sticky="ew")
         
         frame_btns = ttk.Frame(win)

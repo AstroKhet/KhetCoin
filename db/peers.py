@@ -1,11 +1,11 @@
+import time
 import aiosqlite
 
-from networking.constants import GETADDR_LIMIT
 from utils.ip import format_ip
 from utils.config import APP_CONFIG
 
 PEERS_SQL = APP_CONFIG.get("path", "peers")
-async def save_peer_from_addr(addr: tuple):
+async def save_peer_from_addr(addr_msg_data: tuple):
     """
     Saves an address from `AddrMessage`
     
@@ -15,51 +15,35 @@ async def save_peer_from_addr(addr: tuple):
         ip: bytes
         port: int
     """
-    timestamp, services, ip, port = addr
+    timestamp, services, ip, port = addr_msg_data
     ip = format_ip(ip)
     
     # Insert if ip does not exist, otherwise ignore
     async with aiosqlite.connect(PEERS_SQL) as db:
         await db.execute(
             """
-            INSERT OR IGNORE INTO peers (ip, port, last_seen, services)
+            INSERT OR IGNORE INTO peers (name, ip, port, added, last_seen, services)
             VALUES (?, ?, ?, ?)
             """,
-            (ip, port, timestamp, services)
+            ("Peer", ip, port, int(time.time()), timestamp, services)
         )
         await db.commit()
 
-
-async def load_peers():
-    """
-	"id"	INTEGER,
-	"name"	TEXT,
-	"ip"	TEXT,
-	"port"	INTEGER,
-	"added"	INTEGER,
-	"last_seen"	INTEGER,
-	"ban_score"	INTEGER DEFAULT 0,
-    )"""
+async def load_all_peers():
     async with aiosqlite.connect(PEERS_SQL) as db:
-        async with db.execute(
-            "SELECT * FROM peers ORDER BY RANDOM() LIMIT ?", (APP_CONFIG.get("node", "max_peers"),)
-        ) as cur:
+        async with db.execute("SELECT * FROM peers ORDER BY last_seen DESC") as cur:
             peers = await cur.fetchall()
     return peers
 
 
-async def get_active_peers(limit=GETADDR_LIMIT):
-    """Randomly chooses peers with last_seen less than `cfg:peer_inactive_timeout` seconds ago, up to `limit`"""
-    
+async def set_last_seen(ip, port, last_seen):
     async with aiosqlite.connect(PEERS_SQL) as db:
-        async with db.execute(
-            "SELECT * FROM peers WHERE last_seen > ? ORDER BY RANDOM() LIMIT ?", (APP_CONFIG.get("node", "peer_inactive_timeout"), limit)
-        ) as cur:
+        await db.execute("UPDATE peers SET last_seen = ? WHERE ip = ? AND port = ?;", (last_seen, ip, port))
+        
+        
+async def load_all_active_peers():
+    latest_last_seen = int(time.time()) - APP_CONFIG.get("node", "peer_inactive_timeout")
+    async with aiosqlite.connect(PEERS_SQL) as db:
+        async with db.execute("SELECT * FROM peers WHERE last_seen > ? ORDER BY RANDOM()", (latest_last_seen, )) as cur:
             peers = await cur.fetchall()
-            return peers
-
-
-# Say you want to add a block_height column later:
-
-# cur.execute("ALTER TABLE peers ADD COLUMN block_height INTEGER")
-# conn.commit()
+    return peers

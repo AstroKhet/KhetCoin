@@ -16,7 +16,6 @@ def main():
             return
 
     RUNTIME_SETUP()
-
     from gui.app import KhetcoinApp
 
     node_kwargs = {

@@ -5,7 +5,7 @@ These should neither be configurable nor seen by the user normally.
 
 ####################################
 NETWORK_MAGIC = "BITE".encode()  # 42 49 54 45
-NETWORK_PORT = 8888
+NETWORK_PORT = 8666
 
 PROTOCOL_VERSION = 201  # Current Khetcoin protocol version
 SERVICES = 0  # No additional services

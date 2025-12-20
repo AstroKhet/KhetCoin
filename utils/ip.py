@@ -34,7 +34,6 @@ def format_ip(ip_bytes: bytes) -> str:
 
 
 def is_routable(ip_bytes: bytes | str | int) -> bool:
-    # # TODO: remove localhost debug feature
     # return True
     try:
         ip = ipaddress.ip_address(ip_bytes)

@@ -4,6 +4,7 @@ Setup file to create LMDB database and save genesis block
 
 from math import floor
 import sqlite3
+import time
 
 from crypto.hashing import HASH256
 from db.constants import ADDR_DB, HEIGHT_DB, INDEX_DB, LMDB_ENV, BLOCK_MAGIC, BLOCKS_DB, TX_DB, UTXO_DB
@@ -40,8 +41,18 @@ def init_db():
                 name TEXT,
                 ip TEXT,
                 port INTEGER,
-                ban_score INTEGER
+                added INTEGER,
+                last_seen INTEGER,
+                services INTEGER
             );""")
+        con.commit()
+        
+        # Bootstrap peer (Khet himself)
+        cur.execute("""
+            INSERT INTO peers (name, ip, port, added, last_seen, services) 
+            VALUES (?, ?, ?, ?)
+        """, ("Khet", "128.106.117.21", 8666, int(time.time()), 0, 1)
+        )
         con.commit()
         
     # 2. LMDB files (.mdb)
