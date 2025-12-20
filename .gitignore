@@ -11,3 +11,6 @@ __pycache__/
 # Ignore all .mdb files
 *.mdb
 *.db
+
+# Ignore all scratch* files
+scratch*.py

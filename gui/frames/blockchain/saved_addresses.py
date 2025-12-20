@@ -6,10 +6,13 @@ from tkinter import messagebox
 import sqlite3
 
 from crypto.key import wif_decode
-from gui.frames.common.scrollable import create_scrollable_treeview
+from gui.common.scrollable import create_scrollable_treeview
 from gui.helper import center_popup, copy_to_clipboard
 from utils.config import APP_CONFIG
 from utils.fmt import format_age, format_epoch
+
+
+ADDRESSES_SQL = APP_CONFIG.get("path", "addresses")
 
 class SavedAddressesFrame(tk.Frame):
     def __init__(self, parent, controller, node):
@@ -95,15 +98,19 @@ class SavedAddressesFrame(tk.Frame):
         self._selected_addr = None
         self._selected_iid = None
         self._generate_addrs_treeview()
-        self._update()
+        
+        self._is_active = True
     
-    def refocus(self):
-        self.addrs = self._load_addrs()
-        self._generate_addrs_treeview()
+    def on_hide(self):
+        self._is_active = False
+        
+    def on_show(self):
+        self._is_active = True
+        self._update()
         
     def _load_addrs(self):
         # Should only run once upon the first time loading this frame.
-        with sqlite3.connect(APP_CONFIG.get("path", "addresses")) as con:
+        with sqlite3.connect(ADDRESSES_SQL) as con:
             cur = con.cursor()
             cur.execute("SELECT * FROM addresses")
             rows = cur.fetchall()
@@ -204,7 +211,7 @@ class SavedAddressesFrame(tk.Frame):
             cmd = "UPDATE addresses SET address = ? WHERE id = ?"
                         
         self.addrs[self._selected_iid][field] = value
-        with sqlite3.connect(APP_CONFIG.get("path", "addresses")) as con:
+        with sqlite3.connect(ADDRESSES_SQL) as con:
             cur = con.cursor()
             # Duplicate check
             if field == "address":
@@ -256,7 +263,7 @@ class SavedAddressesFrame(tk.Frame):
         elif wif_decode(addr) is None:
             messagebox.showwarning("Failed to save address", "Invalid Address!")
         else:
-            with sqlite3.connect(APP_CONFIG.get("path", "addresses")) as con:
+            with sqlite3.connect(ADDRESSES_SQL) as con:
                 cur = con.cursor()
                 
                 # Duplicate check
@@ -290,7 +297,7 @@ class SavedAddressesFrame(tk.Frame):
         iid = self._selected_iid
         name = self.addrs[iid]['name']
         if messagebox.askokcancel(title="Confirm deletion", message=f"Are you sure you want to remove \"{name}\" from your contacts?"):
-            with sqlite3.connect(APP_CONFIG.get("path", "addresses")) as con:
+            with sqlite3.connect(ADDRESSES_SQL) as con:
                 cur = con.cursor()
                 cur.execute("DELETE FROM addresses WHERE id = ?", (iid,))
             self.addrs.pop(iid)
@@ -301,6 +308,9 @@ class SavedAddressesFrame(tk.Frame):
 
         
     def _update(self):
+        if not self._is_active:
+            return
+        
         for iid in self.tree_addrs.get_children():
             age = format_age(int(time.time()) - self.addrs[int(iid)]["added"]) + " ago"
             self.tree_addrs.set(iid, "added", age)

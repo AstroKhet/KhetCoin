@@ -2,6 +2,7 @@ import logging
 
 from typing import BinaryIO
 from coincurve import PrivateKey
+from db.height import get_blockchain_height
 from ktc_constants import MAX_BLOCK_SIZE
 
 from blockchain.constants import SIGHASH_ALL, SIGOPS_LIMIT
@@ -9,7 +10,7 @@ from blockchain.script import Script
 
 from crypto.hashing import HASH256
 
-from db.block import get_blockchain_height, median_time_past
+from db.block import median_time_past
 from db.tx import get_tx
 
 from utils.fmt import format_bytes
@@ -44,11 +45,12 @@ class TransactionInput:
         self._prev_output = None
 
     def __str__(self):
-        result =  f"\tPrev Tx Hash: {self.prev_tx_hash.hex()}\n"
-        result += f"\tPrev Tx Index: {self.prev_index}\n"
-        result += f"\tScript Sig: {self.script_sig}\n"
-        result += f"\tSequence: {self.sequence}\n"
-        return result
+        return (
+            f"      Prev Tx Hash : {self.prev_tx_hash.hex()}\n"
+            f"      Prev Index   : {self.prev_index}\n"
+            f"      Script Sig   : {self.script_sig}\n"
+            f"      Sequence     : {self.sequence}"
+        )
 
     @classmethod
     def parse(cls, stream: BinaryIO | bytes) -> 'TransactionInput':
@@ -113,11 +115,11 @@ class TransactionOutput:
         self._change = False  # Determines if this output is change
     
     def __str__(self):
-        result = "Output:\n"
-        result += f"\tValue: {self.value} \n"
-        result += f"\tScript Pubkey: {self.script_pubkey}\n"
-        return result
-    
+        return (
+            f"      Value        : {self.value}\n"
+            f"      ScriptPubKey : {self.script_pubkey}"
+        )
+
     @classmethod
     def parse(cls, stream: BinaryIO | bytes) -> 'TransactionOutput':
         if isinstance(stream, bytes):
@@ -162,27 +164,28 @@ class Transaction:
         self.outputs = outputs
         self.locktime = locktime
 
-        # For fast calculation of self.size().
-        self._serialize_cache = None 
-
-    def __setattr__(self, name, value) -> None:
-        if name != "_serialize_cache":
-            self._serialize_cache = None
-        super().__setattr__(name, value)
-
     def __str__(self):
-        result = f"Version: {self.version}\n"
-        result += f"Inputs: \n"
-        for tx_in in self.inputs:
-            result += str(tx_in)
-            result += "\n"
-        result += f"Outputs: \n"
-        for tx_out in self.outputs:
-            result += str(tx_out)
-            result += "\n"
-        result += f"Locktime: {self.locktime}\n"
-        return result
+        lines = [
+            f"Transaction {self.hash().hex()}",
+            f"  Version: {self.version}",
+            "",
+            f"  Inputs ({len(self.inputs)}):",
+        ]
 
+        for i, tx_in in enumerate(self.inputs):
+            lines.append(f"    [{i}]")
+            lines.append(str(tx_in))
+
+        lines.append("")
+        lines.append(f"  Outputs ({len(self.outputs)}):")
+
+        for i, tx_out in enumerate(self.outputs):
+            lines.append(f"    [{i}]")
+            lines.append(str(tx_out))
+
+        lines.append(f"\n  Locktime: {self.locktime}")
+        return "\n".join(lines)
+    
     @classmethod
     def parse(cls, stream: BinaryIO | bytes) -> 'Transaction':
         """Parses a transaction from a Binary I/O or bytes"""
@@ -209,9 +212,6 @@ class Transaction:
         return cls.parse(BytesIO(bytes))
 
     def serialize(self) -> bytes:
-        if self._serialize_cache:
-            return self._serialize_cache
-
         result: bytes = int_to_bytes(self.version)
 
         result += encode_varint(len(self.inputs))
@@ -222,7 +222,6 @@ class Transaction:
 
         result += int_to_bytes(self.locktime)
 
-        self._serialize_cache = result
         return result
 
     def _sig_hash(self, index: int, NO_HASH: bool = False) -> bytes:
@@ -346,7 +345,7 @@ class Transaction:
  
                 output_seen.add(outpoint)
 
-        # 3. Locktime checks (see https://en.bitcoin.it/wiki/NLockTime)
+        # 3. Locktime checks 
         if self.locktime == 0:  # Tx is immediately spendable
             pass
         elif self.locktime < 500_000_000:  # locktime is the least height requried before tx is spendable

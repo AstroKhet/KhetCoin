@@ -4,7 +4,7 @@ from random import randint
 import time
 from typing import List
 
-from db.block import get_blockchain_height
+from db.height import get_blockchain_height
 from networking.constants import PING_TIMEOUT, USER_AGENT
 from networking.constants import PROTOCOL_VERSION, SERVICES
 from networking.messages.envelope import MessageEnvelope

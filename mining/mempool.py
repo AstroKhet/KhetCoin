@@ -174,8 +174,11 @@ class Mempool:
     def get_orphan_tx(self, tx_hash: bytes) -> Transaction | None:
         return self._orphan_txs.get(tx_hash, None)
 
-    def get_all_valid_tx(self) -> list[Transaction]:
-        return list(self._valid_txs.values())
+    def get_all_valid_tx(self, explicit_sort=False) -> list[Transaction]:
+        if explicit_sort:  # Used for block mining; transaction order must follow mempool addition order
+            return list(sorted(self._valid_txs.values(), key=lambda tx: self._time_log[tx.hash()]))
+        else:  # Although addition order is already preserved in self._valid_txs for python versions > 3.7
+            return list(self._valid_txs.values())
 
     def get_all_orphan_tx(self) -> list[Transaction]:
         return list(self._orphan_txs.values())
@@ -195,13 +198,19 @@ class Mempool:
     def get_no_tx(self):
         return len(self._valid_txs.values())
         
-         
+    def remove_mined_txs(self, txs: list[Transaction]):
+        for tx in txs:
+            tx_hash = tx.hash()
+            if self._valid_txs.pop(tx_hash, None) is None:
+                self._orphan_txs.pop(tx_hash, None)
+        
     def revalidate_mempool(self):
         """
         Used to completely revalidate every single transaction in the mempool. Used when blocks are added/removed
         \nThis function should ONLY be called after the UTXO set has updated to the latest version.
         """
-        all_txs = self._valid_txs.values() + self._orphan_txs.values()
+        all_txs = list(self._valid_txs.values()) + list(self._orphan_txs.values())
+
         self._valid_txs = dict()
         self._orphan_txs = dict()
         self._orphan_missing_utxo = dict()
@@ -219,8 +228,8 @@ class Mempool:
         Checks if any transactions were added or removd from self._mempool from the last time this function was called.
         \n`i` is used as an ID for different frames.
         """
-        updated = (self._updated_valids >> i) & 1
-        self._updated_valids &= ~(1 << i)
+        updated = (self._updated_valids >> i) & 1 == 0
+        self._updated_valids |= (1 << i)
         return updated
 
     def check_update_orphans(self, i=1):
@@ -228,6 +237,6 @@ class Mempool:
         Checks if any transactions were added or removd from self._orphan_txs from the last time this function was called.
         \n`i` is used as an ID for different frames.
         """
-        updated = (self._updated_orphans >> i) & 1
-        self._updated_orphans &= ~(1 << i)
+        updated = (self._updated_orphans >> i) & 1 == 0
+        self._updated_orphans |= (1 << i)
         return updated

@@ -4,10 +4,14 @@
 
 # Genesis Block
 GENESIS_HASH = bytes.fromhex(
-    "0000074d9ce1bc6fa2c396897578693ac89d2de2b5f3c217ea9dd2fbd12b6961"
+    "00000000216feded70527582af622cdb1318c0fe1358275412702936392bfa2b"
 )
 """`bytes` The 32 Bytes Big-Endian hash of the very first block in KhetCoin."""
 
+GENESIS_BLOCK_BYTES = bytes.fromhex(
+    "000000010000000000000000000000000000000000000000000000000000000000000000769720b1ed19dcb5d1d4f9a428a4a50ba226998bb248484280f69fbe42657ece69461a1e00ffff1dbb484d540100000001010000000000000000000000000000000000000000000000000000000000000000ffffffff510800000000000000014000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002062f4b6865742fffffffff01000000012a05f2001976a914cd2286d99dd62a7aa3a26e2a99f7fd5519b20f0488ac00000000"
+)
+"""`bytes` The byte representation of the genesis block. Using sha256 twice yields `GENESIS_HASH`"""
 
 KTC = 100_000_000
 """`int` 1 KTC = 100_000_000 khets. khet is the lowest indivisible currecny unit in KhetCoin."""
@@ -41,9 +45,9 @@ MAX_BLOCK_SIZE = 1 << 20  # 1 MB
 """`int` Maximum byte size for each block"""
 
 
-MAX_TARGET = 0xFFFF * pow(256, 0x1F - 3)
+HIGHEST_TARGET = 0xFFFF * pow(256, 0x1D - 3)
 """`int` Highest possible target value for mining. Also used for the first blocks in KhetCoin"""
 
 
-MAX_BITS = bytes.fromhex("00ffff1f")
+HIGHEST_BITS = bytes.fromhex("00ffff1d")
 """`bytes` Special byte representation of `MAX_TARGET`."""

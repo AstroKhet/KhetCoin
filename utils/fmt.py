@@ -123,10 +123,14 @@ def truncate_bytes(h: bytes | str, ends=2) -> str:
     return h[:ends*2] + "...." + h[-ends*2:]  #type: ignore
 
 
-def format_snake_case(text):
+def format_snake_case(text, all_words=True):
     """
-    Repalces underscores with spaces and capitalizes each word.
+    Repalces underscores with spaces and capitalizes each word is `all_words` is set.
     
     Example: oh_hell_naw -> Oh Hell Naw
     """
-    return " ".join(w[0].upper() + w[1:] for w in text.split("_"))
+    words = text.split("_")
+    if all_words:
+        return " ".join(w[0].upper() + w[1:] for w in words)
+    else:
+        return " ".join(words).capitalize()

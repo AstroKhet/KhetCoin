@@ -9,10 +9,10 @@ from blockchain.constants import TX_VERSION, P2PKH_INPUT_SIZE, P2PKH_OUTPUT_SIZE
 from blockchain.script import Script, P2PKH_script_pubkey
 from blockchain.transaction import Transaction, TransactionInput, TransactionOutput
 from crypto.key import get_private_key, wif_decode
-from db.addr import get_addr_utxos, get_addr_utxos_value
+from db.utxo import get_utxo_set_to_addr, get_utxo_value_to_addr
 from gui.bindings import bind_entry_prompt
-from gui.frames.common.scrollable import create_scrollable_frame, create_scrollable_treeview
-from gui.frames.common.transaction import tx_popup
+from gui.common.scrollable import create_scrollable_frame, create_scrollable_treeview
+from gui.common.transaction import tx_popup
 from gui.vcmd import register_VCMD_INT, register_VMCD_KTC
 from gui.helper import center_popup
 from ktc_constants import KTC, MAX_KHETS
@@ -22,10 +22,9 @@ from networking.node import Node
 from utils.config import APP_CONFIG
 from utils.helper import encode_varint
 from wallet.algorithm import get_recommended_fee_rate, select_utxos
-from wallet.constants import MIN_CHANGE
 
 log = logging.getLogger(__name__)
-
+ADDRESSES_SQL = APP_CONFIG.get("path", "addresses")
 
 class PayFrame(tk.Frame):
     def __init__(self, parent, controller, node: Node):
@@ -91,7 +90,7 @@ class PayFrame(tk.Frame):
         self.btn_clear_all = ttk.Button(self.frame_options, text="Remove All", command=self._remove_all_blocks)
         self.btn_clear_all.pack(side="left", padx=2)
 
-        balance_val = get_addr_utxos_value(self.node.pk_hash) / KTC
+        balance_val = get_utxo_value_to_addr(self.node.pk_hash) / KTC
         self.btn_wallet = ttk.Button(self.frame_options, text="Wallet", command=lambda: self.controller.switch_to_frame("your_wallet"))
         self.btn_wallet.pack(side="right", padx=2)
         self.label_balance = tk.Label(self.frame_options, text=f"Balance: {balance_val:.8f} KTC")
@@ -105,7 +104,7 @@ class PayFrame(tk.Frame):
         self._contacts = None
         
     def on_show(self):
-        with sqlite3.connect(APP_CONFIG.get("path", "addresses")) as con:
+        with sqlite3.connect(ADDRESSES_SQL) as con:
             cur = con.cursor()
             cur.execute("SELECT * FROM addresses")
             rows = cur.fetchall()
@@ -244,7 +243,7 @@ class PayFrame(tk.Frame):
             op_value += int(value)
         
         # 0.2 Get UTXO set & sanity checks
-        utxo_set = get_addr_utxos(self.node.pk_hash)
+        utxo_set = get_utxo_set_to_addr(self.node.pk_hash)
         utxo_value = sum(utxo.value for utxo in utxo_set)
         if op_value > utxo_value:
             messagebox.showerror(title="Error creating transaction", message="Insufficient funds!", detail=f"You need at least {(op_value - utxo_value)/KTC:.8f} KTC more to complete this transaction")
@@ -291,14 +290,14 @@ class PayFrame(tk.Frame):
             
             if change == 0:
                 break
-            elif change >= MIN_CHANGE:
+            elif change >= APP_CONFIG.get("wallet", "min_change") * KTC:
                 break
             else:  # Insufficient funds, reiterate
                 deficit = -change
                 target += deficit
                 continue
         else:
-            messagebox.showerror(title="Error creating transaction", message="Error selecting UTXOs. Try reducing MIN_CHANGE.")
+            messagebox.showerror(title="Error creating transaction", message="Error selecting UTXOs. Try reducing min_change in settings.")
             return None
         
         inputs = []

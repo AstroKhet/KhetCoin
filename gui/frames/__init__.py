@@ -6,7 +6,6 @@ from gui.frames.blockchain.mining import MiningFrame
 
 from gui.frames.main.dashboard import DashboardFrame
 from gui.frames.main.settings import SettingsFrame
-from gui.frames.main.profile import ProfileFrame
 
 from gui.frames.network.node import NodeFrame
 from gui.frames.network.manage_peers import ManagePeersFrame
@@ -21,7 +20,6 @@ from gui.frames.wallet.your_wallet import YourWalletFrame
 FRAMES_CONFIG = {
     "dashboard": DashboardFrame,
     "settings": SettingsFrame,
-    "profile": ProfileFrame,
     
     "view_blockchain": ViewBlockchainFrame,
     "saved_addresses": SavedAddressesFrame,
@@ -42,7 +40,7 @@ FRAMES_CONFIG = {
 MENU_CONFIG = [
     {
         "name": "main", 
-        "options": ["dashboard", None, "settings", "profile"]
+        "options": ["dashboard", None, "settings"]
     },
     {
         "name": "blockchain",

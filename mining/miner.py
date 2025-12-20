@@ -11,6 +11,7 @@ from blockchain.script import Script
 from blockchain.transaction import Transaction, TransactionInput, TransactionOutput
 from crypto.hashing import HASH256
 
+from db.height import get_blockchain_height
 from utils.fmt import format_hashrate
 from utils.helper import bytes_to_int, int_to_bytes
 from utils.config import APP_CONFIG
@@ -27,25 +28,20 @@ class Miner:
     The scriptSig for the coinbase transaction will be a 64 byte big-endian integer by default, used purely for mining.
     """
     def __init__(self, processes=None):
-        self.block = None
-        self.target = None
-        self.outputs = None
-        
         self.cpu_count = cpu_count()
         if processes is None:
             self.no_processes = self.cpu_count
         else:
             self.no_processes = processes
             
-        self.batch_size = Value('Q', APP_CONFIG.get("mining", "batch_size"))
-        self.stop_flag = Value('B', 1)
+        # self.batch_size = Value('Q', APP_CONFIG.get("mining", "batch_size"))
         
-        self.mined = Event()
+        
         self.nonce = Value('I', 0)
         self.sig_nonce = Value('Q', 0)
         
         self.result_queue = Queue()
-        self.processes: list[Process] = []
+        self._mine_processes: list[Process] = []
         
         # Mining variables
         self._recent_hash_rates = []  # Moving average for stable hash rate reporting
@@ -58,60 +54,58 @@ class Miner:
         self._mine_end_time = 0
         
         self._miner_thread = None
+        self.stop_flag = Value('B', 1)
         
-        self.is_mining = False
+        self.mined_block: Block | None = None
         log.info("Miner initiated.")
 
-    def mine(self, block, outputs):
-        self.mined.clear()
-        
+    def mine(self, candidate_block: Block, cb_outputs: list[TransactionOutput]):
+        """Main interface for mining."""
         with self.stop_flag.get_lock():
             self.stop_flag.value = 0
-            
+        
+        self.mined_block = None
+        
         self._miner_thread =  threading.Thread(
-            target=self.start_mining,
-            args=(block, outputs),
+            target=self._initiate_miners,
+            args=(candidate_block, cb_outputs),
             daemon=True
         )
-        
         self._miner_thread.start()
         
-    def start_mining(self, block: Block, outputs: list[TransactionOutput]) -> Block | None:
+    def _initiate_miners(self, candidate_block: Block, cb_outputs: list[TransactionOutput]) -> Block | None:
         # 1. Initial spawning of mining worker processes
-        print('start mining')
-        log.info('Mining process started')
+        log.info(f'Initiating {self.no_processes} mining processes.')
+        height = get_blockchain_height() + 1
+        miner_tag = str(APP_CONFIG.get("mining", "tag")).encode("utf-8")
         
-        self.block = block
-        self.target = block.target
-        self.outputs = outputs
+        script_sig = Script([int_to_bytes(height, 8), int_to_bytes(0, 64), miner_tag])
+        cb_tx = build_coinbase_tx(script_sig, cb_outputs)
+        header = candidate_block.header
+        candidate_block.set_coinbase_tx(cb_tx)
         
-        header = block.header
-        cb_tx = build_coinbase_tx(0, outputs)
-        block.add_tx(cb_tx)
-        
+
         for i in range(self.no_processes):
             proc = Process(
                 target=miner,
                 args=(self.result_queue, 
                       header.copy(),
-                      block.merkle_tree.copy(), 
+                      candidate_block.merkle_tree.copy(), 
                       cb_tx.copy(), 
                       i, 
                       self.no_processes, 
-                      self.target,
-                      self.batch_size,
+                      candidate_block.target,
+                      height, 
+                      miner_tag,
                       self.stop_flag
                       )
             )
             proc.start()
-            print('process started!')
-            self.processes.append(proc)
+            self._mine_processes.append(proc)
         
         self._mine_start_time = time.time()
         self._last_hash_report = time.time()
 
-        self.is_mining = True
-        print(self.stop_flag.value)
         while not self.stop_flag.value:
             status, value = self.result_queue.get()
             
@@ -120,69 +114,48 @@ class Miner:
                 self._hash_counter += value
                 self._total_hashes += value
                 self._report_counter += 1
-            elif status == 1:
-                # Found nonce
-                # print(f"Block mined after {self._total_hashes} hashes")
-                # t = time.time() - self._mine_start_time
-                # print(f"Time taken: {t:.2f}")
-                # print(f"Avg hashrate: {format_hashrate(self._total_hashes / t)}")
+            elif status == 1:  # !!! Found nonce !!!
                 self.shutdown()
                 
                 sig_nonce, nonce = value
-                with self.nonce.get_lock():
-                    self.nonce.value = nonce
-                    
-                with self.sig_nonce.get_lock():
-                    self.sig_nonce.value = sig_nonce
-                    
-                self.mined.set()
+                script_sig = Script([int_to_bytes(height, 8), int_to_bytes(sig_nonce, 64), miner_tag])
+                cb_tx = build_coinbase_tx(script_sig=script_sig, outputs=cb_outputs)
+
+                candidate_block.set_coinbase_tx(cb_tx)
+                candidate_block.set_nonce(nonce)
                 
-                # 
-                # cb_tx = build_coinbase_tx(sig_nonce, self.outputs)
-                # self.block.add_tx(cb_tx)
-                # self.block.nonce = nonce
-                # return self.block
-            
+                self.mined_block = candidate_block
             elif status == 2: # No result
                 pass
             
             # Moderate batch_size ever 0.5s
             now = time.time()
-            # print(now - self._last_hash_report)
             if (t_elapsed := now - self._last_hash_report) >= 0.5:
-                print('hc', self._hash_counter)
-                print('te', t_elapsed)
                 hash_rate = self._hash_counter / t_elapsed
-                print('hr', format_hashrate(hash_rate))
-                report_rate = self._report_counter / t_elapsed
-                print('rr', report_rate)
-                self._record_hash_rate(hash_rate)
-                self._moderate_reporting_rate(report_rate)
+                self._hash_counter = 0
                 self._last_hash_report = now
-                self._report_counter = self._hash_counter = 0
-                print()
-        print("STOPPED MINING")
+
+                self._record_hash_rate(hash_rate)
+
         
         
     def shutdown(self):
+        log.info("Miner shutdown initiated.")
         with self.stop_flag.get_lock():
             self.stop_flag.value = 1
         
-        APP_CONFIG.set("mining", "batch_size", self.batch_size.value)
-        print("shutdown initiated")
-        for proc in self.processes:
+        for proc in self._mine_processes:
             proc.terminate()
-            
         log.info("All miner processes terminated.")
-        print("finish join")
-        self.processes = [] 
+
+        self._mine_processes = [] 
         self._recent_hash_rates = []
         self._mine_end_time = time.time()
-        self.is_mining = False
+        self.mined_block = None
         
     
     def get_hashrate(self) -> float:
-        """Returns a moving average of the 5 latest reported hashrates"""        
+        """Returns a moving average of the 10 latest reported hashrates"""        
         hash_rates = self._recent_hash_rates[:]
         if hash_rates:
             return sum(hash_rates) / len(hash_rates)
@@ -191,26 +164,13 @@ class Miner:
     def set_processes(self, n):
         self.no_processes = n
         
-        
     def _record_hash_rate(self, hash_rate):
         """Records down the latest hash rate in self._recent_hash_rates, up to 10."""
         self._recent_hash_rates.append(hash_rate)
         if len(self._recent_hash_rates) > 10:
             self._recent_hash_rates.pop(0)
             
-    def _moderate_reporting_rate(self, report_rate):    
-        """Moderates Miner.batch size and consequently the hashrate report rate to a self._desired_report_rate"""
-        # (1) Batch Size           * Report rate               = Hash rate
-        # (2) Moderated Batch Size * self._desired_report_rate = Hash rate
-        # (1) = (2), so
-        # Moderated Batch Size = Batch Size * Report rate / self._desired_report_rate
- 
-        with self.batch_size.get_lock():
-            self.batch_size.value = int(
-                self.batch_size.value * (report_rate / self._desired_report_rate)
-            )
-            
-        
+
         
 
 def miner(
@@ -221,41 +181,51 @@ def miner(
     start_nonce: int, 
     step: int, 
     target: int,
-    v_batch,
-    v_stop_flag,
+    height: int,
+    miner_tag: bytes,
+    v_stop_flag
     ):
     """Worker function for block mining. Designed for standard coinbase transactions only (see `build_coinbase_tx`)"""
     hash_count = 0
-    batch = v_batch.value
-    
+
+    batch = 1000
+    last_report = time.perf_counter_ns()
     try:
         for sig_nonce in range(1 << 64):
-            cb_tx.inputs[0].script_sig = Script([int_to_bytes(sig_nonce, 64)])
+            # ScriptSig format for coinbase transactions:
+            # <Height 8B> <nonce 64B> <tag ?B>
+            cb_tx.inputs[0].script_sig = Script(
+                [int_to_bytes(height, 8), 
+                 int_to_bytes(sig_nonce, 64), 
+                 miner_tag]
+            )
+            
             merkle_tree.update_leaf(0, cb_tx.hash())
             header.set_merkle_root(merkle_tree.root())
-        
-            p_head = header.serialize_without_nonce()
+            partial_head = header.serialize_without_nonce()
 
-            for n in range(start_nonce, 1 << 32, step):
-                
-                raw_header = p_head + int_to_bytes(n)
+            for nonce in range(start_nonce, 1 << 32, step):
+                raw_header = partial_head + int_to_bytes(nonce)
                 h = HASH256(raw_header)
                 v = bytes_to_int(h)
                 
                 hash_count += 1
                 if hash_count >= batch:
-                    batch = v_batch.value
                     if v_stop_flag.value:
-                        # print("worker stopped")
                         return
+                    
+                    now = time.perf_counter_ns()
+                    t_elapsed_ns = max(now - last_report, 1)
+                    batch = round(batch * (5e8/t_elapsed_ns))  # report every 0.5s
+                    
                     queue.put((0, hash_count))
                     hash_count = 0
+                    last_report = time.perf_counter_ns()
                     
                 if v < target:
-                    print("nonce found!")
                     if hash_count > 0:
                         queue.put((0, hash_count))
-                    queue.put((1, (sig_nonce, n)))
+                    queue.put((1, (sig_nonce, nonce)))
             
         # No success
         if hash_count > 0:
@@ -263,13 +233,15 @@ def miner(
             
     except KeyboardInterrupt:  # To prevent KeyboardInterrupt errors from hashlib to flood the terminal
         return
+
+    except Exception as e:
+        log.error(f"Error mining: {e}")
             
 
 
 
-def build_coinbase_tx(sig_nonce: int, outputs: list[TransactionOutput]) -> Transaction:
-    """Standard Coinbase Transaction constructor, whereby scriptSig is used solely for extra mining space with a 64bit integer."""
-    script_sig = Script([int_to_bytes(sig_nonce, 64)])
+def build_coinbase_tx(script_sig: Script, outputs: list[TransactionOutput]) -> Transaction:
+    """Standard Coinbase Transaction constructor, whereby scriptSig is <Height 8B> <nonce 64B> <tag ?B>"""
     
     tx_input = TransactionInput(
         prev_hash=bytes(32),

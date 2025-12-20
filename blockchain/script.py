@@ -9,18 +9,18 @@ from utils.helper import int_to_bytes, bytes_to_int, read_varint, encode_varint
 
 class Script:
     def __init__(self, commands: List[bytes | int]=[]):
+        """`bytes` is data, `int` is opcode"""
         self.commands: List[bytes | int] = commands
 
-    def __str__(self) -> str:
-        result = ""
+    def __str__(self):
+        
+        parts = []
         for command in self.commands:
             if isinstance(command, int):
-                result += f"{OP_CODE_NAMES[command]}"
+                parts.append(OP_CODE_NAMES[command])
             else:
-                result += f"{command.hex()}"
-            result += "\n"
-
-        return result[:-1]
+                parts.append(command.hex())
+        return " ".join(parts)
 
     @classmethod
     def parse(cls, stream: BinaryIO) -> 'Script':
@@ -83,7 +83,7 @@ class Script:
 
         return True
 
-    def is_standard_script_sig(self):
+    def is_standard_p2pkh_script_sig(self):
         """
         Checks if Script has the following structure
         - DER Signature
@@ -110,7 +110,7 @@ class Script:
 
         return True
                     
-    def is_p2pkh(self):
+    def is_standard_p2pkh_script_pubkey(self):
         """
         Checks if Script has the following structure
         - 0x76 OP_DUP
@@ -149,7 +149,7 @@ class Script:
 
         Returns a 20B PubkeyHash
         """
-        if not self.is_p2pkh():
+        if not self.is_standard_p2pkh_script_pubkey():
             return None
         
         return self.commands[2]  # type: ignore
@@ -160,7 +160,7 @@ class Script:
 
         Returns a 20B PubkeyHash
         """
-        if not self.is_standard_script_sig():
+        if not self.is_standard_p2pkh_script_sig():
             return None
         return HASH160(self.commands[1])  # type: ignore
     

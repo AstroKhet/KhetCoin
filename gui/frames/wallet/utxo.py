@@ -3,7 +3,11 @@ from tkinter import ttk
 
 from datetime import datetime
 
-from db.addr import get_addr_utxos, get_addr_utxos_value
+from db.utxo import get_utxo_set_to_addr, get_utxo_value_to_addr
+from gui.bindings import bind_hierarchical, mousewheel_cb
+from gui.common.scrollable import create_scrollable_frame
+from gui.fonts import MonoFont, SansFont
+from gui.helper import add_hover_effect, reset_widget
 from ktc_constants import KTC
 from networking.node import Node
 from utils.fmt import truncate_bytes
@@ -16,17 +20,17 @@ class UTXOFrame(tk.Frame):
         self.node = node
         
         # Default is sort by value desc
-        self.utxo_set = get_addr_utxos(self.node.pk_hash)
+        self.utxo_set = get_utxo_set_to_addr(self.node.pk_hash)
         self.utxo_set.sort(key=lambda utxo: utxo.value, reverse=True)
-        self.balance = get_addr_utxos_value(self.node.pk_hash)
+        self.balance = get_utxo_value_to_addr(self.node.pk_hash)
 
         self.frame_balance_container = tk.Frame(self)
         self.frame_balance_container.pack(fill="x", pady=(10, 5))
         
-        self.label_balance_title = tk.Label(self.frame_balance_container, text="BALANCE", font=("Segoe UI", 9), fg="gray")
+        self.label_balance_title = tk.Label(self.frame_balance_container, text="BALANCE", font=SansFont(9), fg="gray")
         self.label_balance_title.pack()
         
-        self.label_balance_value = tk.Label(self.frame_balance_container, text=f"{self.balance/KTC:.8f} KTC", font=("Segoe UI", 16, "bold"))
+        self.label_balance_value = tk.Label(self.frame_balance_container, text=f"{self.balance/KTC:.8f} KTC", font=SansFont(16, weight="bold"))
         self.label_balance_value.pack()
 
         self.frame_sort = tk.Frame(self)
@@ -41,35 +45,35 @@ class UTXOFrame(tk.Frame):
         self.sort_order_var = tk.StringVar(value="Ascending")
         self.om_sort_order = ttk.OptionMenu(self.frame_sort, self.sort_order_var, "Ascending", "Ascending", "Descending", command=self._sort_utxo)
         self.om_sort_order.pack(side="left", padx=5)
-
-        self.frame_utxos = tk.Frame(self)
-        self.frame_utxos.pack(fill="both", expand=True, padx=5, pady=5)
-
-        self.cnv_utxos = tk.Canvas(self.frame_utxos, highlightthickness=0)
-        self.vsb_utxos = ttk.Scrollbar(self.frame_utxos, orient="vertical", command=self.cnv_utxos.yview)
-        self.frame_utxo_grid = tk.Frame(self.cnv_utxos)
-
-        self.cnv_utxos.configure(yscrollcommand=self.vsb_utxos.set)
         
-        self.vsb_utxos.pack(side="right", fill="y")
-        self.cnv_utxos.pack(side="left", fill="both", expand=True)
-        self.cnv_utxo_window = self.cnv_utxos.create_window((0, 0), window=self.frame_utxo_grid, anchor="nw")
+        self.label_no_utxo = ttk.Label(self.frame_sort, text=f"({len(self.utxo_set)} UTXOs)")
+        self.label_no_utxo.pack(side="left", padx=5)
 
-        self.frame_utxo_grid.bind(
-            "<Configure>", lambda _: self.cnv_utxos.configure(scrollregion=self.cnv_utxos.bbox("all"))
-        )
-        self.cnv_utxos.bind(
-            "<Configure>", 
-            lambda e: self.cnv_utxos.itemconfig(self.cnv_utxo_window, width=e.width)
-        )
+        self.frame_utxo_container = tk.Frame(self)
+        self.frame_utxo_container.pack(fill="both", expand=True, padx=5, pady=5)
+        self.frame_utxo_container.columnconfigure(0, weight=1)
+        self.frame_utxo_container.rowconfigure(0, weight=1)
         
-        self.frame_utxo_grid.columnconfigure(0, weight=1)
-        self.frame_utxo_grid.columnconfigure(1, weight=1)
-        self.frame_utxo_grid.columnconfigure(2, weight=1)
+        self.frame_utxo_grid, self.cnv_utxo_grid = create_scrollable_frame(self.frame_utxo_container, xscroll=False)
+        
+        self.frame_utxo_grid.columnconfigure(0, weight=1, uniform="utxo_card")
+        self.frame_utxo_grid.columnconfigure(1, weight=1, uniform="utxo_card")
+        self.frame_utxo_grid.columnconfigure(2, weight=1, uniform="utxo_card")
 
-        self._generate_utxos()
-
-    def _generate_utxos(self):
+        self._generate_utxo_set_cards()
+        
+        self._is_active = True
+    
+    def on_hide(self):
+        self._is_active = False
+        
+    def on_show(self):
+        self._is_active = True
+        self._update()
+        
+    def _generate_utxo_set_cards(self):
+        reset_widget(self.frame_utxo_grid)
+        
         for i, utxo in enumerate(self.utxo_set):
             row, col = divmod(i, 3)
             
@@ -79,26 +83,39 @@ class UTXOFrame(tk.Frame):
             frame_value_line = tk.Frame(frame_utxo_cell, bg="white")
             frame_value_line.pack(anchor="w", fill="x", padx=10, pady=(10, 2))
 
-            label_utxo_value = tk.Label(frame_value_line, text=f"{utxo.value/KTC:.8f} KTC", font=("Segoe UI", 14, "bold"), bg="white")
+            label_utxo_value = tk.Label(frame_value_line, text=f"{utxo.value/KTC:.8f} KTC", font=SansFont(14, weight="bold"), bg="white")
             label_utxo_value.pack(side="left")
 
-            label_utxo_currency = tk.Label(frame_value_line, text="KTC", font=("Segoe UI", 8), fg="gray", bg="white")
+            label_utxo_currency = tk.Label(frame_value_line, text="KTC", font=SansFont(8), fg="gray", bg="white")
             label_utxo_currency.pack(side="left", padx=(5, 0), anchor="s", pady=(0, 2))
 
             frame_info_line = tk.Frame(frame_utxo_cell, bg="white")
             frame_info_line.pack(anchor="w", fill="x", padx=10, pady=2)
-            
-            label_utxo_from = tk.Label(frame_info_line, text="FROM", font=("Segoe UI", 8), fg="gray", bg="white")
+
+            label_utxo_from = tk.Label(frame_info_line, text="FROM", font=SansFont(8), fg="gray", bg="white")
             label_utxo_from.pack(side="left")
 
-            label_utxo_hash = tk.Label(frame_info_line, text=truncate_bytes(utxo.tx_hash), font=("Courier", 10), bg="white")
-            label_utxo_hash.pack(side="left", padx=5)
+            
+            btn_utxo_from = tk.Button(
+                frame_info_line, 
+                text=truncate_bytes(utxo.tx_hash), font=MonoFont(), bg="#f0f8ff",
+                command=lambda q=utxo.tx_hash: self.controller.switch_to_frame(
+                    "view_blockchain",
+                    init_query=q,
+                    init_from="UTXO"
+                ),
+                relief="flat"
+            )
+            btn_utxo_from.pack(side="left", padx=10)
+            add_hover_effect(btn_utxo_from, "#f0f8ff", "#E0F0FF")
 
-            label_utxo_id_text = tk.Label(frame_info_line, text=f"ID {utxo.index}", font=("Segoe UI", 8), fg="gray", bg="white")
+            label_utxo_id_text = tk.Label(frame_info_line, text=f"ID {utxo.index}", font=SansFont(8), fg="gray", bg="white")
             label_utxo_id_text.pack(side="left")
             
             label_utxo_age = tk.Label(frame_utxo_cell, text=datetime.fromtimestamp(utxo.timestamp).strftime("%d %b %Y, %H:%M:%S"), bg="white")
             label_utxo_age.pack(anchor="w", padx=10, pady=(2, 10))
+        
+        bind_hierarchical("<MouseWheel>", self.frame_utxo_grid, lambda e: mousewheel_cb(e, self.cnv_utxo_grid))
         
     def _sort_utxo(self, *_):
         var = self.sort_by_var.get()
@@ -113,4 +130,15 @@ class UTXOFrame(tk.Frame):
         elif var == "Time":
             self.utxo_set.sort(key=lambda utxo: utxo.timestamp, reverse=reverse)
             
-        self._generate_utxos()
+        self._generate_utxo_set_cards()
+        
+    def _update(self):
+        if not self._is_active:
+            return
+        
+        if self.node.check_updated_blockchain(3):
+            self.utxo_set = get_utxo_set_to_addr(self.node.pk_hash)
+            self.label_no_utxo.config(text=f"({len(self.utxo_set)} UTXOs)")
+            self._generate_utxo_set_cards()
+        
+        self.after(500, self._update)

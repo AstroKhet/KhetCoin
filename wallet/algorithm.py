@@ -2,10 +2,10 @@
 
 
 from blockchain.transaction import Transaction
-from db.addr import UTXO
-from ktc_constants import MAX_BLOCK_SIZE
+from db.utxo import UTXO
+from ktc_constants import KTC, MAX_BLOCK_SIZE
 from mining.constants import MIN_RELAY_TX_FEE_RATE
-from wallet.constants import MIN_CHANGE
+from utils.config import APP_CONFIG
 
 
 def select_utxos(utxo_set: list[UTXO], target, use_min_change = True) -> list[UTXO] | None:
@@ -20,7 +20,7 @@ def select_utxos(utxo_set: list[UTXO], target, use_min_change = True) -> list[UT
     2. Is >= to target 
     3. Tries again with `use_min_change` = False if this allows UTXO set value >= target at least.
     """
-    min_change = MIN_CHANGE if use_min_change else 0
+    min_change = APP_CONFIG.get("wallet", "min_change") * KTC if use_min_change else 0
     total_utxo = sum(utxo.value for utxo in utxo_set)
     
     # 0. Sanity checks

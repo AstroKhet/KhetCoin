@@ -28,15 +28,15 @@ def read_varint(stream: BinaryIO) -> int:
             return i
 
 def encode_varint(i: int) -> bytes:
-    """Encodes an integer as a variable integer."""
+    """Encodes an integer as a Bitcoin-style variable integer."""
     if i < 0xfd:
         return bytes([i])
     elif i <= 0xffff:
-        return b'\xfd' + int_to_bytes(i)
+        return b'\xfd' + int_to_bytes(i, 2)  # 2 bytes
     elif i <= 0xffffffff:
-        return b'\xfe' + int_to_bytes(i)
-    else:  # assumes i <= 0xffffffffffffffff
-        return b'\xff' + int_to_bytes(i)
+        return b'\xfe' + int_to_bytes(i, 4)  # 4 bytes
+    else:  # i <= 0xffffffffffffffff
+        return b'\xff' + int_to_bytes(i, 8)  # 8 bytes
 
 
 def encode_ip(ip: bytes | str | int) -> bytes:

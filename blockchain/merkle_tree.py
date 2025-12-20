@@ -29,6 +29,10 @@ class MerkleTree:
             self.levels.append(parent_level)
             cur = parent_level
 
+    def __str__(self):
+        result = f"Merkle root: {self.root().hex()}\n"
+        result += ", ".join(leaf.hex() for leaf in self.levels[0])
+        return result
 
     def root(self) -> bytes | None:
         if not self.levels:

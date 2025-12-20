@@ -8,6 +8,10 @@ KHET_ORANGE_LIGHT = "#FFE5C0"
 
 
 
+BTN_STOP_RED = "#dc3545"
+BTN_START_GREEN = "#28a745"
+BTN_CONFIG_GRAY = "#6e7f80"
+BTN_NEUTRAL_BLUE = "#9dbcd4"
 
 # Generator for alternative colorings
 

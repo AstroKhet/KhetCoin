@@ -1,6 +1,6 @@
 import tkinter as tk
 from datetime import timedelta
-from gui.colours import colour_pattern_gen
+from gui.colours import BTN_CONFIG_GRAY, BTN_START_GREEN, BTN_STOP_RED, colour_pattern_gen
 from networking.node import Node
 from utils.config import APP_CONFIG
 from utils.fmt import format_bytes
@@ -19,30 +19,28 @@ class NodeFrame(tk.Frame):
         frame_left = tk.Frame(self, bg="white")
         frame_left.place(relx=0, rely=0, relwidth=0.5, relheight=1.0)
 
-        label_name = tk.Label(
-            frame_left, text=f"{node.name}'s Node", bg="white", font=("Arial", 16)
-        )
+        label_name = tk.Label(frame_left, text=f"{node.name}'s Node", bg="white", font=("Arial", 16))
         label_name.pack(fill="x", pady=(20, 50), padx=10)
 
         # BUTTON to start/stop server
         self.btn_server = tk.Button(
             frame_left,
             text="Start Node",
-            bg="#28a745",
+            bg=BTN_START_GREEN,
             fg="white",
             height=2,
             font=("Segue UI", 15, "bold"),
             command=self._toggle_server_switch
         )
         if self.node.is_running:
-            self.btn_server.config(text="Shutdown Node", bg="#dc3545")
+            self.btn_server.config(text="Shutdown Node", bg=BTN_STOP_RED)
         self.btn_server.pack(fill=tk.BOTH, padx=40, pady=15)
 
         # BUTTON to go to Network/Manage Peers
         btn_peers = tk.Button(
             frame_left,
             text="Manage Peers",
-            bg="#6e7f80",
+            bg=BTN_CONFIG_GRAY,
             fg="white",
             height=2,
             font=("Segue UI", 15, "bold"),
@@ -70,6 +68,13 @@ class NodeFrame(tk.Frame):
 
 
         # Start periodic updates
+        self._is_active = True
+    
+    def on_hide(self):
+        self._is_active = False
+        
+    def on_show(self):
+        self._is_active = True
         self._update()
         
     def _toggle_server_switch(self):
@@ -82,19 +87,12 @@ class NodeFrame(tk.Frame):
             self.btn_server.config(text="Start Node", bg="#28a745") 
             
     def _update(self):
-        self.label_uptime.configure(
-            text=f"Server uptime: {timedelta(seconds=self.node.uptime)}"
-        )
-
-        self.label_peers.configure(
-            text=f"No. connected peers: {len(self.node.peers)}"
-        )
+        if not self._is_active:
+            return
         
-        self.label_data_sent.configure(
-            text=f"Data sent: {format_bytes(self.node.bytes_sent)}"
-        )
-        self.label_data_received.configure(
-            text=f"Data received: {format_bytes(self.node.bytes_recv)}"
-        )
+        self.label_uptime.configure(text=f"Server uptime: {timedelta(seconds=self.node.uptime)}")
+        self.label_peers.configure(text=f"No. connected peers: {len(self.node.peers)}")
+        self.label_data_sent.configure(text=f"Data sent: {format_bytes(self.node.bytes_sent)}")
+        self.label_data_received.configure(text=f"Data received: {format_bytes(self.node.bytes_recv)}")
 
         self.after(500, self._update)

@@ -26,17 +26,23 @@ class Header:
         self.bits: bytes = bits
         self.nonce: int = nonce
         
-        self._h1 = int_to_bytes(self.version) + self.prev_block
-        self._h2 = int_to_bytes(timestamp) + self.bits
-        self._h3 = self._h1 + merkle_root + self._h2
-        
         self._serialize_cache = None
         
     def __setattr__(self, name, value) -> None:
         if name != "_serialize_cache":
             self._serialize_cache = None
         super().__setattr__(name, value)
+    
+    def __str__(self) -> str:
+        result = f"Block: {self.hash().hex()}\n"
+        result += f"Version {self.version}\n"
+        result += f"Previous Block: {self.prev_block.hex()}\n"
+        result += f"Merkle Root: {self.merkle_root.hex()}\n"
+        result += f"Timestamp: {self.timestamp}\n"
+        result += f"Bits: {self.bits.hex()}\n"
+        result += f"Nonce: {self.nonce}\n"
         
+        return result
     @classmethod
     def parse(cls, stream: BinaryIO | bytes) -> 'Header':
         if isinstance(stream, bytes):
@@ -44,7 +50,7 @@ class Header:
             
         version = bytes_to_int(stream.read(4))
         prev_block = stream.read(32)
-        merkle_root = stream.read(32)  # Calculated dynamically instead
+        merkle_root = stream.read(32) 
         timestamp = bytes_to_int(stream.read(4))
         bits = stream.read(4)
         nonce = bytes_to_int(stream.read(4))
@@ -68,14 +74,14 @@ class Header:
     
     def set_merkle_root(self, root):
         self.merkle_root = root
-        self._h3 = self._h1 + root + self._h2
+        self._serialize_cache = None
 
     def hash(self) -> bytes:
         return HASH256(self.serialize())
     
     # Methods specific for mining
     def serialize_without_nonce(self):
-        return self._h3
+        return self.serialize()[:76]
     
     def copy(self):
         return Header(self.version, self.prev_block, self.merkle_root, self.timestamp, self.bits, self.nonce)

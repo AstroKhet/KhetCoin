@@ -5,8 +5,10 @@ import time
 from typing import Optional, Set, Tuple
 from requests import get
 
+from blockchain.block import Block
 from crypto.hashing import HASH160
 from crypto.key import get_public_key
+from db.index import BlockIndex, get_block_tip_index
 from mining.miner import Miner
 from networking.messages.types.mempool import MempoolMessage
 from utils.config import APP_CONFIG
@@ -53,6 +55,12 @@ class Node:
         
         self.is_running = False
         # Transient variables for efficient GUI update
+        
+        # Block consensus 
+        self.block_tip_index: BlockIndex = get_block_tip_index()
+        self.orphan_blocks: list[Block] = []
+        
+        self._updated_blockchain = 0
         self._updated_peers = 0
         log.info(f"Node '{self.name}' initialized on {self.host}:{self.port}")
 
@@ -64,9 +72,9 @@ class Node:
             addr = self.server.sockets[0].getsockname()
             self.server_start_time = int(time.time())
 
-            log.info(f"[{self.name}] Server listening on {addr}")
+            log.info(f"Server listening on {addr}")
         except Exception as e:
-            log.exception(f"[{self.name}] Error starting server: {e}")
+            log.exception(f"Error starting server: {e}")
             self.server = None
             self._shutdown_requested.set()
 
@@ -121,13 +129,13 @@ class Node:
         peer_rotation_task = asyncio.create_task(self._peer_rotation())
         self.add_task(peer_rotation_task)
 
-        log.info(f"[{self.name}] Node running. Waiting for shutdown signal...")
+        log.info(f"Node running. Waiting for shutdown signal...")
         self.is_running = True
         await self._shutdown_requested.wait()
 
-        log.info(f"[{self.name}] Shutdown requested. Cleaning up...")
+        log.info(f"Shutdown requested. Cleaning up...")
         await self._shutdown_tasks()
-        log.info(f"[{self.name}] Node finished.")
+        log.info(f"Node finished.")
 
     async def connect_to_peer(self, addr: tuple, name: str = "", initial=False):
         peer_str_ip = f"{addr[0]}:{addr[1]}"
@@ -138,16 +146,16 @@ class Node:
         if len(self.peers) >= APP_CONFIG.get("node", "max_peers"):
             return
 
-        log.info(f"[{self.name}] Attempting TCP connection to {peer_str_ip}...")
+        log.info(f"Attempting TCP connection to {peer_str_ip}...")
         reader = writer = None
         try:
             reader, writer = await asyncio.wait_for(asyncio.open_connection(addr[0], addr[1]), timeout=CONNECTION_TIMEOUT)
-            log.info(f"[{self.name}] TCP connection established with {peer_str_ip}. Starting handshake...")
+            log.info(f"TCP connection established with {peer_str_ip}. Starting handshake...")
         except ConnectionRefusedError:
             log.info(f"{peer_str_ip} - connection refused.")
             return
         except Exception as e:
-            log.exception(f"[{self.name}] Unexpected error connecting TCP to {peer_str_ip}: {e}")
+            log.exception(f"Unexpected error connecting TCP to {peer_str_ip}: {e}")
             return
 
         peer = Peer(self, reader, writer, name, session_id=self.next_peer_id, direction="outbound")
@@ -167,20 +175,24 @@ class Node:
                 self._updated_peers = 0
                 
                 if initial:
-                    log.info(f"[{self.name}] mempool message sent")
+                    log.info(f"mempool message sent")
                     self.add_task(asyncio.create_task(peer.send_message(MempoolMessage())))
             else:
-                log.warning(f"[{self.name}] Handshake failed with peer {peer.str_ip}.")
+                log.warning(f"Handshake failed with peer {peer.str_ip}.")
         except Exception as e:
-            log.exception(f"[{self.name}] Error during handshake with peer {peer.str_ip}: {e}")
+            log.exception(f"Error during handshake with peer {peer.str_ip}: {e}")
             await peer.close()
 
     def broadcast(self, 
-        message: MessageEnvelope, 
+        message,
         exclude: Optional[Peer] = None,
         sample: int = APP_CONFIG.get("node", "max_peers"),
         outbound: bool = False
     ):
+        """
+        Broadcasts a `message` of type `MessageEnvelope` or and of `networking.messages.types.CORE_MESSAGE` to up to `sample` connected peers except `exclude`
+        \nRestricts to only outbound peers if `outbound` is True
+        """
         target_peers = list(self.peers)
 
         if exclude: 
@@ -203,7 +215,7 @@ class Node:
         # Get peer address
         addr = writer.get_extra_info("peername", ("Unknown", 0))
         peer_str_ip = f"{addr[0]}:{addr[1]}"
-        log.debug(f"[{self.name}] Handling incoming connection from {peer_str_ip}")
+        log.debug(f"Handling incoming connection from {peer_str_ip}")
 
         # Check if its possible to connect with peer
         if len(self.peers) >= APP_CONFIG.get("node", "max_peers"):
@@ -235,20 +247,20 @@ class Node:
 
         try:
             log.debug(
-                f"[{self.name}] Waiting for handshake established future from {peer.str_ip}..."
+                f"Waiting for handshake established future from {peer.str_ip}..."
             )
             established = await asyncio.wait_for(
                 peer.established, timeout=HANDSHAKE_TIMEOUT
             )
             if established:
-                log.info(f"[{self.name}] Handshake successful with incoming peer {peer.str_ip}. Adding to peers.")
+                log.info(f"Handshake successful with incoming peer {peer.str_ip}. Adding to peers.")
                 self.peers.add(peer)
                 self._updated_peers = 0
             else:
-                log.warning(f"[{self.name}] Handshake failed or rejected by incoming peer {peer.str_ip} (established=False).")
+                log.warning(f"Handshake failed or rejected by incoming peer {peer.str_ip} (established=False).")
         
         except Exception as e:
-            log.exception(f"[{self.name}] Error during handshake with incoming peer {peer.str_ip}: {e}")
+            log.exception(f"Error during handshake with incoming peer {peer.str_ip}: {e}")
             if not peer.writer.is_closing():
                 await peer.close()
 
@@ -287,10 +299,17 @@ class Node:
             )
 
     async def _peer_rotation(self):
-        log.info("Rotating task started")
-        # periodically removes inactive peers and rotates active ones
-        return
-
+        timeout = APP_CONFIG.get("node", "peer_inactive_timeout")
+        
+        while not self._shutdown_requested.is_set():
+            now = time.time()
+            for peer in self.peers:
+                if now - time.timepeer.last_recv > timeout:
+                    self.remove_peer(peer)
+                     
+            asyncio.sleep(1)
+            
+            
     def add_task(self, task: asyncio.Task):
         def task_done(task: asyncio.Task):
             try:
@@ -306,16 +325,18 @@ class Node:
         task.add_done_callback(task_done)
 
     async def shutdown(self):
-        log.info(f"[{self.name}] External shutdown triggered.")
+        log.info(f"External shutdown triggered.")
         self._shutdown_requested.set()
 
     async def _shutdown_tasks(self):
         await self.close_server()
 
     def remove_peer(self, peer: Peer):
+        peer.close()
         self.peers.discard(peer)
         self.peer_id_lookup.pop(peer.session_id)
         self._updated_peers = 0
+        
         log.info(f"Peer No. {peer.session_id} disconnected.")
 
     def get_peer_by_id(self, peer_id: int) -> Peer | None:
@@ -326,9 +347,20 @@ class Node:
         Checks if any transactions were added or removd from self.peers from the last time this function was called.
         \n`i` is used as an ID for different frames.
         """
-        updated = (self._updated_peers >> i) & 1
-        self._updated_peers &= ~(1 << i)
+        updated = (self._updated_peers >> i) & 1 == 0
+        self._updated_peers |= (1 << i)
         return updated
+    
+    def check_updated_blockchain(self, i=1):
+        updated = (self._updated_blockchain >> i) & 1 == 0
+        self._updated_blockchain |= (1 << i)
+        return updated
+    
+    def set_tip(self, block_index):
+        self.block_tip_index = block_index
+        self._updated_blockchain = 0
+        
+
     
     @property
     def uptime(self) -> int:

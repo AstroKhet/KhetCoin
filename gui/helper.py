@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import messagebox
 
+from utils.config import APP_CONFIG
+
 def reset_widget(widget):
     for child in widget.winfo_children():
         reset_widget(child) 
@@ -45,7 +47,8 @@ def attach_tooltip(widget, text, delay=150):
 def copy_to_clipboard(widget, text: str):
     widget.clipboard_clear()
     widget.clipboard_append(text)
-    messagebox.showinfo(title="Text copied!", message=f"Copied\n\"{text}\"to clipboard.")
+    if APP_CONFIG.get("app", "copy_popup"):
+        messagebox.showinfo(title="Text copied!", message=f"Copied\n\"{text}\"to clipboard.")
 
 def center_popup(parent, win):
     win.update_idletasks()
@@ -65,13 +68,13 @@ def center_popup(parent, win):
     win.geometry(f"+{x}+{y}")
     
     
-def add_hover_effect(btn, normal_bg, hover_bg):
+def add_hover_effect(widget, normal_bg, hover_bg):
 
     def on_enter(e):
-        btn.configure(bg=hover_bg, activebackground=hover_bg)
+        widget.configure(bg=hover_bg, activebackground=hover_bg)
 
     def on_leave(e):
-        btn.configure(bg=normal_bg, activebackground=normal_bg)
+        widget.configure(bg=normal_bg, activebackground=normal_bg)
 
-    btn.bind("<Enter>", on_enter)
-    btn.bind("<Leave>", on_leave)
+    widget.bind("<Enter>", on_enter)
+    widget.bind("<Leave>", on_leave)

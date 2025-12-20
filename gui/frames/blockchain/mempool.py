@@ -3,9 +3,9 @@ import tkinter as tk
 from tkinter import ttk
 
 from blockchain.transaction import Transaction
-from gui.frames.common.columns import TX_COLS
-from gui.frames.common.transaction import tx_popup
-from gui.frames.common.scrollable import create_scrollable_treeview
+from gui.common.columns import TX_COLS
+from gui.common.transaction import tx_popup
+from gui.common.scrollable import create_scrollable_treeview
 from ktc_constants import KTC
 from networking.node import Node
 from utils.fmt import format_age, format_bytes, truncate_bytes
@@ -59,6 +59,14 @@ class MempoolFrame(tk.Frame):
         self._selected_tx: Transaction | None = None
         self._generate_valid_txs_treeview()
         self._generate_orphan_txs_treeview()
+        
+        self._is_active = True
+    
+    def on_hide(self):
+        self._is_active = False
+        
+    def on_show(self):
+        self._is_active = True
         self._update()
         
     def _generate_valid_txs_treeview(self):
@@ -156,6 +164,9 @@ class MempoolFrame(tk.Frame):
             tx_popup(self, tx, type_)
 
     def _update(self):
+        if not self._is_active:
+            return
+        
         # Time updating
         for iid in self.tree_valid_txs.get_children():
             tx_hash = bytes.fromhex(iid)     

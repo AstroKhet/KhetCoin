@@ -1,21 +1,27 @@
 import os
 import re
-from tabnanny import check
+
 import base58
 from coincurve import PrivateKey, PublicKey
-from numpy import byte
 
-from crypto.hashing import HASH256
+from crypto.hashing import HASH160, HASH256
+from utils.config import APP_CONFIG
 
-KEY_DATA_ACCESS_FOLDER = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    r".local\keys"
-)
+KEYS_DIR = APP_CONFIG.get("path", "keys")
 
-def create_private_key() -> bytes:
-    private_key_bytes = os.urandom(32)
-    return private_key_bytes
 
+def create_private_key(prefix="") -> bytes:
+    while True:
+        private_key_bytes = os.urandom(32)
+        priv_key = PrivateKey(private_key_bytes)
+
+        addr = HASH160(priv_key.public_key.format(compressed=True))
+        wif = wif_encode(addr)
+
+        # Skip the leading '1'
+        if wif[1:].startswith(prefix):
+            return private_key_bytes
+        
 
 def save_private_key(priv_key: bytes | PrivateKey, name: str = "") -> None:
     if isinstance(priv_key, PrivateKey):
@@ -34,8 +40,8 @@ def save_private_key(priv_key: bytes | PrivateKey, name: str = "") -> None:
         raise ValueError("Name must contain only letters and numbers.")
 
     # Check if the name already exists
-    priv_key_path = os.path.join(KEY_DATA_ACCESS_FOLDER, f"{name}.dat")
-    if os.path.exists(priv_key_path):
+    priv_key_path = KEYS_DIR / f"{name}.dat"
+    if priv_key_path.exists():
         raise ValueError(f"{name} already exists. Please choose a different name.")
 
     with open(priv_key_path, "wb") as private_key_dat:
@@ -44,9 +50,9 @@ def save_private_key(priv_key: bytes | PrivateKey, name: str = "") -> None:
 
 
 def get_private_key(name: str, raw: bool=True) -> bytes | PrivateKey:
-    priv_key_path = os.path.join(KEY_DATA_ACCESS_FOLDER, f"{name}.dat")
+    priv_key_path = KEYS_DIR / f"{name}.dat"
 
-    if not os.path.exists(priv_key_path):
+    if not priv_key_path.exists():
         raise ValueError(f"No private key found with the name: \"{name}\"")
 
     with open(priv_key_path, "rb") as file:
@@ -94,3 +100,9 @@ def wif_decode(wif: str) -> bytes | None:
         return None
     
     return addr
+
+
+def private_key_to_wif(private_key_raw):
+    addr = HASH160(PrivateKey(private_key_raw).public_key.format(compressed=True))
+    wif = wif_encode(addr)
+    return wif

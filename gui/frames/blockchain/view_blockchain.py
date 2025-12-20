@@ -6,18 +6,18 @@ from tkinter import ttk
 from math import ceil
 
 from blockchain.block import Block, calculate_block_subsidy
-from blockchain.script import Script
 from blockchain.transaction import Transaction
 from crypto.key import wif_encode
-from db.block import get_raw_block, get_raw_block_at_height, get_block_hash_at_height, get_block_height_at_hash, get_block_metadata, get_block_metadata_at_height, get_blockchain_height
+from db.block import get_raw_block, get_raw_block_at_height, get_block_height_at_hash, get_block_metadata, get_block_metadata_at_height
+from db.height import get_block_hash_at_height
 from db.tx import get_tx, get_tx_metadata
 from gui.bindings import bind_entry_prompt, bind_hierarchical, mousewheel_cb
-from gui.frames.common.transaction import script_popup
-from gui.frames.common.scrollable import create_scrollable_frame, create_scrollable_treeview
+from gui.common.transaction import script_popup
+from gui.common.scrollable import create_scrollable_frame, create_scrollable_treeview
 from gui.helper import reset_widget, attach_tooltip, copy_to_clipboard
 from ktc_constants import KTC
 from networking.node import Node
-from utils.fmt import format_age, format_bytes, format_epoch, format_number, truncate_bytes
+from utils.fmt import format_age, format_bytes, format_epoch, format_number, format_snake_case, truncate_bytes
 
 # TODO: Implement sort by ascending/descending for each column in block view
 # Blocks are sorted by height in descending order
@@ -73,10 +73,47 @@ class ViewBlockchainFrame(tk.Frame):
 
         self.block_page = tk.StringVar(value="1")
         self.block_page.trace_add("write", self._page_select_block)
-        self.no_block_rows = get_blockchain_height() + 1
+        self.no_block_rows = self.node.block_tip_index.height + 1
         self.no_block_pages = ceil(self.no_block_rows / self.rows_per_page)   # Block 0 Genesis
+        
+        block_list_cols = {
+            "height": ("Height", 12),
+            "hash": ("Block Hash", 20),
+            "age": ("Age", 40),
+            "no_txs": ("No. txs", 12),
+            "size": ("Size", 12),
+            "sent": ("Total Sent", 12),
+            "fees": ("Total Fees", 12)
+        }
 
-        self.tree_block_list = None
+        self.tree_block_list = create_scrollable_treeview(self.lf_block_list, block_list_cols, (0, 0), xscroll=False)
+        self.tree_block_list.bind("<<TreeviewSelect>>", self._on_block_select)
+
+        frame_block_list_footer = tk.Frame(self.lf_block_list)
+        frame_block_list_footer.grid(row=2, column=0, pady=5, sticky="ew")
+
+        frame_block_list_footer.columnconfigure(0, weight=0, uniform="footer_border")
+        frame_block_list_footer.columnconfigure(1, weight=1)
+        frame_block_list_footer.columnconfigure(2, weight=0, uniform="footer_border")
+
+        frame_block_page = tk.Frame(frame_block_list_footer)
+        frame_block_page.grid(row=0, column=1)
+
+        self.spinbox_block = tk.Spinbox(
+            frame_block_page,
+            from_=1,
+            to=self.no_block_pages,
+            increment=1,
+            width=5,
+            textvariable=self.block_page
+        )
+        self.spinbox_block.pack(side="left", padx=(0, 4), pady=5)
+
+        self.label_max_block_page = tk.Label(frame_block_page, text=f"of {self.no_block_pages}")
+        self.label_max_block_page.pack(side="left", pady=5)
+
+        btn_refresh = ttk.Button(frame_block_list_footer, text="Refresh", command=self._switch_to_block_list)
+        btn_refresh.grid(row=0, column=2, sticky="e", padx=5, pady=5)
 
         # 2. Block Details (block_details)
         self._selected_block: Block | None = None
@@ -95,7 +132,7 @@ class ViewBlockchainFrame(tk.Frame):
         self._selected_tx: Transaction | None = None
         self.lf_tx_details = ttk.LabelFrame(self.frame_main, text="Transaction Details", padding="5")
         self.lf_tx_details.grid(row=1, column=0, sticky="nsew")
-        self.lf_tx_details.rowconfigure(0, weight=1)
+        self.lf_tx_details.rowconfigure(1, weight=1)
         self.lf_tx_details.columnconfigure(0, weight=1)
         self.lf_tx_details.columnconfigure(1, weight=0)
         
@@ -120,11 +157,17 @@ class ViewBlockchainFrame(tk.Frame):
         else:
             self._switch_to_block_list()
 
+        self._is_active = True
+    
+    def on_hide(self):
+        self._is_active = False
+        
+    def on_show(self):
+        self._is_active = True
         self._update()
 
     def _switch_to_block_list(self):
         self._current_page = "block_list"
-        self._generate_block_list()
         self._page_select_block()
         self.lf_block_list.tkraise()
 
@@ -199,9 +242,7 @@ class ViewBlockchainFrame(tk.Frame):
                     pass
 
         if not search_success:
-            self._switch_to_notfound(
-                f'Your search "{str(query)}" did not yield any results :('
-            )
+            self._switch_to_notfound(f'Your search "{str(query)}" did not yield any results :(')
 
     def _page_select_block(self, *_):
         page = int(self.block_page.get())
@@ -209,8 +250,7 @@ class ViewBlockchainFrame(tk.Frame):
         end_row = min(self.rows_per_page * page, self.no_block_rows)
 
         # Refresh the block list first
-        if self.tree_block_list:
-            self.tree_block_list.delete(*self.tree_block_list.get_children())
+        self.tree_block_list.delete(*self.tree_block_list.get_children())
         
         for depth in range(start_row, end_row):
             height = self.no_block_rows - depth - 1
@@ -279,44 +319,8 @@ class ViewBlockchainFrame(tk.Frame):
         tx_pos = int(selection[0])
         self._selected_tx = parent_block._transactions[tx_pos]
         self._switch_to_tx_details()
-
-    def _generate_block_list(self):
-        reset_widget(self.lf_block_list)
-        block_list_cols = {
-            "height": ("Height", 12),
-            "hash": ("Block Hash", 20),
-            "age": ("Age", 40),
-            "no_txs": ("No. txs", 12),
-            "size": ("Size", 12),
-            "sent": ("Total Sent", 12),
-            "fees": ("Total Fees", 12)
-        }
-
-        self.tree_block_list = create_scrollable_treeview(self.lf_block_list, block_list_cols, (0, 0))
-        self.tree_block_list.bind("<<TreeviewSelect>>", self._on_block_select)
-
-        frame_block_list_footer = tk.Frame(self.lf_block_list)
-        frame_block_list_footer.grid(row=1, column=0, pady=5)
-
-        spinbox_block = tk.Spinbox(
-            frame_block_list_footer, 
-            from_=1, 
-            to=self.no_block_pages, 
-            increment=1, 
-            width=5,
-            textvariable=self.block_page
-        )
-        spinbox_block.pack(side="left", padx=5, pady=5)
-
-        label_max_block_page = tk.Label(frame_block_list_footer, text=f"of {self.no_block_pages}")
-        label_max_block_page.pack(side="left", padx=2, pady=5)
-
-        frame_nav = tk.Frame(self.lf_block_list)
-        frame_nav.grid(row=1, column=0, columnspan=2, sticky="e")
-
-        btn_refresh = ttk.Button(frame_nav, text="Refresh", command=self._switch_to_block_list)
-        btn_refresh.pack(side="right", padx=5, pady=5)
-
+        
+        
     def _generate_block_details(self, block: Block):
         reset_widget(self.lf_block_details)
 
@@ -325,6 +329,7 @@ class ViewBlockchainFrame(tk.Frame):
         
         # Scroll region
         frame_block_details, cnv_block_details = create_scrollable_frame(self.lf_block_details, xscroll=False)
+        frame_block_details.columnconfigure(0, weight=1)
 
         # 1. Block metadata
         frame_block_meta = tk.Frame(frame_block_details)
@@ -347,7 +352,7 @@ class ViewBlockchainFrame(tk.Frame):
             "Size": format_bytes(meta.full_block_size),
             "Previous Block": block.prev_block,
             "Version": block.version,
-            "Merkle Root": block.merkle_root,
+            "Merkle Root": block.merkle_tree.root(),
             "Mined on": format_epoch(block.timestamp),
             "Difficulty": format_number(block.difficulty()),
             "Nonce": block.nonce,
@@ -355,13 +360,11 @@ class ViewBlockchainFrame(tk.Frame):
             "Total Sent": f"{meta.total_sent / KTC:.2f} KTC",
             "Fee": f"{meta.fee/KTC} KTC",
             "Fee/KB": f"{(meta.fee/KTC) / meta.full_block_size * 1024:.2f} KTC/KB",
-            "Confirmations": get_blockchain_height() - height,
+            "Confirmations": self.node.block_tip_index.height - height,
             "Minted": f"{calculate_block_subsidy(height)/KTC} KTC",
             "Block Reward": f"{reward / KTC} KTC",
+            "Miner Tag": block.get_miner_tag() or "N/A"
         }
-
-        frame_block_meta.columnconfigure(0, weight=1)
-        frame_block_meta.columnconfigure(1, weight=1)
 
         for i, (key, val) in enumerate(details.items()):
             cell = ttk.Frame(frame_block_meta)
@@ -459,27 +462,8 @@ class ViewBlockchainFrame(tk.Frame):
         tx_hash = tx.hash()
         self.lf_tx_details.config(text=f"Transaction Details for <{tx_hash.hex()}>")
 
-        cnv_tx_details = tk.Canvas(self.lf_tx_details, highlightthickness=0)
-        cnv_tx_details.grid(row=0, column=0, sticky="nsew")
-        
-        vsb_tx_details = ttk.Scrollbar(self.lf_block_details, orient="vertical", command=cnv_tx_details.yview)
-        vsb_tx_details.grid(row=0, column=1, sticky="ns")
-        cnv_tx_details.configure(yscrollcommand=vsb_tx_details.set)
-
-        frame_tx_details = tk.Frame(cnv_tx_details)
-        frame_tx_details.columnconfigure(0, weight=1)
-        win_id_tx_details = cnv_tx_details.create_window((0, 0), window=frame_tx_details, anchor="nw")
-        cnv_tx_details.bind(
-            "<Configure>",
-            lambda e: cnv_tx_details.itemconfig(win_id_tx_details, width=e.width)
-        )
-        frame_tx_details.bind(
-            "<Configure>",
-            lambda _: cnv_tx_details.configure(scrollregion=cnv_tx_details.bbox("all"))
-        )
-        
         # 1. tx Metadata
-        frame_tx_meta = tk.Frame(frame_tx_details)
+        frame_tx_meta = tk.Frame(self.lf_tx_details)
         frame_tx_meta.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         frame_tx_meta.columnconfigure(0, weight=1, uniform="tx_cols")
         frame_tx_meta.columnconfigure(1, weight=1, uniform="tx_cols")
@@ -556,8 +540,13 @@ class ViewBlockchainFrame(tk.Frame):
             widget_val.grid(row=0, column=1, sticky="ew", padx=5)
 
         # 2. Input/Output of Transaction
-        frame_tx_io = tk.Frame(frame_tx_details)
-        frame_tx_io.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        frame_tx_io_container = ttk.Frame(self.lf_tx_details)
+        frame_tx_io_container.columnconfigure(0, weight=1)
+        frame_tx_io_container.rowconfigure(0, weight=1)
+        frame_tx_io_container.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        
+        frame_tx_io, cnv_tx_io = create_scrollable_frame(frame_tx_io_container, xscroll=False)
+        
         frame_tx_io.columnconfigure(0, weight=1, uniform="txio_cols")
         frame_tx_io.columnconfigure(1, weight=1, uniform="txio_cols")
 
@@ -610,7 +599,8 @@ class ViewBlockchainFrame(tk.Frame):
             ).grid(row=0, column=2)
 
             tk.Label(frame_output, text=f"{value/KTC:.8f}KTC", fg="gray").grid(row=1, column=0, sticky="w")
-
+            
+        bind_hierarchical("<MouseWheel>", frame_tx_io_container, lambda e: mousewheel_cb(e, cnv_tx_io))
         # Footer
         frame_footer_block = tk.Frame(self.lf_tx_details)
         frame_footer_block.grid(row=2, column=0, columnspan=2, sticky="w")
@@ -632,7 +622,7 @@ class ViewBlockchainFrame(tk.Frame):
 
         if self._init_from is not None:
             btn_return_to_from = ttk.Button(
-                frame_nav, text="Back to Wallet", 
+                frame_nav, text=f"Back to {format_snake_case(self._init_from)}", 
                 command=lambda ifr=self._init_from: self.controller.switch_to_frame(ifr)
             )
             btn_return_to_from.pack(side="right", padx=5, pady=5)
@@ -657,36 +647,40 @@ class ViewBlockchainFrame(tk.Frame):
         btn_return.pack(anchor="se", padx=5, pady=5)
 
     def _update(self):
-        no_blocks = get_blockchain_height() + 1
-        if no_blocks != self.no_block_rows:
-            self.no_block_rows = no_blocks
+        if not self._is_active:
+            return
+        
+        if self.node.check_updated_blockchain(1):
+            self.no_block_rows = self.node.block_tip_index.height + 1
             self.no_block_pages = ceil(self.no_block_rows / self.rows_per_page)
+            self.spinbox_block.config(to=self.no_block_pages)
+            self.label_max_block_page.config(text=f"of {self.no_block_pages}")
 
             # Auto refresh block list view when a new block is added
             if self._current_page == "block_list":
                 self._page_select_block()
 
-        match self._current_page:
-            case "block_list":
-                if self.tree_block_list:
-                    for iid in self.tree_block_list.get_children():
-                        height = int(self.tree_block_list.set(iid, "height"))
-                        meta = get_block_metadata_at_height(height)
-                        if meta is None:
-                            continue
 
-                        self.tree_block_list.set(iid, "age", format_age(time.time() - meta.timestamp))
-                        
-            case "block_details":
-                label, created = self._block_age_field
-                label.config(text=format_age(time.time() - created))
+        if self._current_page == "block_list":
+            for iid in self.tree_block_list.get_children():
+                height = int(self.tree_block_list.set(iid, "height"))
+                meta = get_block_metadata_at_height(height)
+                if meta is None:
+                    continue
 
-            case "tx_details":
-                label, created = self._tx_age_field
-                label.config(text=format_age(time.time() - created))
+                self.tree_block_list.set(iid, "age", format_age(time.time() - meta.timestamp))
 
-            case _:
-                pass
+        elif self._current_page == "block_details":
+            label, created = self._block_age_field
+            label.config(text=format_age(time.time() - created))
+
+        elif self._current_page == "tx_details":
+            label, created = self._tx_age_field
+            label.config(text=format_age(time.time() - created))
+
+        else:
+            pass
+
 
         self.after(500, self._update)
         

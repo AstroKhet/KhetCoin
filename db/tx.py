@@ -1,12 +1,13 @@
-import os
 
-from io import BytesIO
 
 from dataclasses import dataclass
-from db.block import get_block_hash_at_height, get_block_metadata
+from db.block import get_block_metadata
 from db.constants import LMDB_ENV, TX_DB
-from utils.helper import bytes_to_int, read_varint
+from db.height import get_block_hash_at_height
+from utils.helper import bytes_to_int
 from utils.config import APP_CONFIG
+
+BLOCKCHAIN_DIR = APP_CONFIG.get("path", "blockchain")
 
 @dataclass
 class TransactionMetadata:
@@ -33,7 +34,7 @@ def get_tx(tx_hash: bytes) -> bytes |  None:
         offset = bytes_to_int(value[4:8])
         tx_size = bytes_to_int(value[8:12])
 
-        dat_file = os.path.join(APP_CONFIG.get("path", "blockchain"), f"blk{dat_file_no:08}.dat")
+        dat_file = BLOCKCHAIN_DIR / f"blk{dat_file_no:08}.dat"
         stream = open(dat_file, 'rb')
         stream.seek(offset)
     
@@ -48,7 +49,7 @@ def get_tx_metadata(tx_hash: bytes) -> TransactionMetadata | None:
         offset = bytes_to_int(value[4:8])
         tx_size = bytes_to_int(value[8:12])
         pos = bytes_to_int(value[12:16])
-        height = read_varint(BytesIO(value[16:]))
+        height = bytes_to_int(value[16:24])
         
         return TransactionMetadata(
             tx_hash=tx_hash,

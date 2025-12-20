@@ -1,3 +1,4 @@
+from io import BytesIO
 import logging
 import asyncio
 import time
@@ -6,11 +7,14 @@ from blockchain.block import Block
 from blockchain.transaction import Transaction
 
 from crypto.hashing import HASH256
+from db.block import get_block_exists, get_block_height_at_hash, get_raw_block, get_raw_header
+from db.functions import connect_block, reorg_blockchain, save_block_data
+from db.height import get_block_hash_at_height
+from db.index import BlockIndex, get_block_index
 from db.tx import get_tx_exists, get_tx
-from db.block import *
+
 from db.peers import get_active_peers, save_peer_from_addr
 
-from db.utxo import update_UTXO_set
 from networking.constants import BLOCK_TYPE, GETADDR_LIMIT, GETBLOCKS_LIMIT, GETHEADERS_LIMIT, TX_TYPE
 from networking.messages.envelope import MessageEnvelope
 from networking.messages.types import *
@@ -79,10 +83,6 @@ class MessageProcessor:
         # else do nothing; pong should only happen after a ping, which resets peer.pong_future
 
     async def process_inv(self, peer: Peer, msg: InvMessage):
-        # https://en.bitcoin.it/wiki/Protocol_documentation#inv
-        # Allows a node to advertise its knowledge of one or more objects. It can be received unsolicited, or in reply to getblocks.
-        # Payload (maximum 50,000 entries, which is just over 1.8 megabytes):
-
         inventory = msg.inventory
         missing_inventory = []
         for item in inventory:
@@ -232,16 +232,36 @@ class MessageProcessor:
         block = Block.parse(BytesIO(block_raw))
 
         
+        # 0.1 Block already seen & saved
         if get_block_exists(block.hash()):
             return
+        
+        # 0.2 Orphan block
+        if not get_block_exists(block.prev_block):
+            self.node.orphan_blocks.append(block)
+            return
 
-        # 1. No fork scenario
-        if block.verify():
-            save_block(block)
-            update_UTXO_set(block.get_transactions())
-            self.node.mempool.revalidate_mempool()
+        # 0.3 Verify block
+        if not block.verify():
+            return
+        
+        # 1. Now we know that the block is valid and extends off the blockchain DAG somewhere
+        save_block_data(block)
 
-        return
+        block_index = get_block_index(block.hash())
+
+        # 1.1 Block extends active chain
+        if block.prev_block == self.node.block_tip_index.hash:
+            connect_block(block, self.node)
+            
+        # 2. Block extends forked chain
+        else:
+            if block_index.chainwork > self.node.block_tip_index.chainwork:
+                reorg_blockchain(self.node.block_tip_index, block_index, self.node)
+            else:
+                # Nothing happens
+                pass
+
 
 
     async def process_getdata(self, peer: Peer, msg: GetDataMessage):
@@ -283,12 +303,8 @@ class MessageProcessor:
 
     async def process_mempool(self, peer: Peer, msg: MempoolMessage):
         """Returns an `inv` message containing the transaction hashes of all valid mempool transactions"""
-        inventory = [
-            (TX_TYPE, tx.hash()) for tx in self.node.mempool.get_all_valid_tx()
-        ]
-        inv_msg = InvMessage(
-            inventory
-        )
+        inventory = [(TX_TYPE, tx.hash()) for tx in self.node.mempool.get_all_valid_tx()]
+        inv_msg = InvMessage(inventory)
         await peer.send_message(inv_msg)
 
 

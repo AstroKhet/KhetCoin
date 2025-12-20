@@ -3,6 +3,7 @@ import tkinter as tk
 import webbrowser
 
 from gui.colours import KHET_ORANGE_LIGHT
+from gui.fonts import SansFont
 from gui.helper import add_hover_effect
 from utils.config import APP_CONFIG
 from utils.fmt import format_snake_case
@@ -10,20 +11,19 @@ from utils.fmt import format_snake_case
 
 
 class DashboardFrame(tk.Frame):
-
     def __init__(self, parent, controller, node):
         super().__init__(parent)
         
         self.node = node
         self.controller = controller
         
-        self.icon_path = os.path.join(APP_CONFIG.get("path", "assets"), "icons\\96px")
+        self.icon_path = APP_CONFIG.get("path", "assets") / "icons" / "96px"
         
         self.rowconfigure(1, weight=1)
         self.columnconfigure(0, weight=1)
 
         # 1. Hello, User!
-        label_greeting = tk.Label(self, text=f"Hello, {self.node.name}", font=("Segoe UI", 20, "bold"))
+        label_greeting = tk.Label(self, text=f"Hello, {self.node.name}", font=SansFont(20, weight="bold"))
         label_greeting.grid(row=0, column=0, sticky="n", pady=(8, 6))
 
 
@@ -41,9 +41,8 @@ class DashboardFrame(tk.Frame):
         self.frame_menu.grid(row=0, column=1, sticky="n")
 
         options = [
-            "profile", "view_blockchain", "node", "mining",
-            "your_wallet", "pay", "saved_addresses", "saved_peers",
-            "settings"
+            "view_blockchain", "node", "mining", "your_wallet", 
+            "pay", "saved_addresses", "saved_peers", "settings"
         ]
 
         self.menu_cols = 4
@@ -65,6 +64,12 @@ class DashboardFrame(tk.Frame):
         # 2.3 Extra buttons
         feedback_cmd = lambda: webbrowser.open("https://forms.gle/n9WrY7BvTkek2S1i9")
         self._put_button(idx+1, "feedback", feedback_cmd)
+        
+        guide_cmd = lambda: webbrowser.open("https://youtu.be/UnktCDi-BVs?si=fVG-LeBJb8WPAmoT")
+        self._put_button(idx+2, "guide", guide_cmd)
+        
+        github_cmd = lambda: webbrowser.open("https://github.com/AstroKhet/Khetcoin")
+        self._put_button(idx+3, "github", github_cmd)
         
     def _put_button(self, idx, option, command):
         r = idx // self.menu_cols
@@ -94,7 +99,7 @@ class DashboardFrame(tk.Frame):
             bg="white", activebackground="white",
             relief="flat", bd=0, highlightthickness=0, 
             padx=12, pady=9,
-            font=("Segoe UI", 12, "bold")
+            font=SansFont(12, weight="bold")
         )
         
         btn.pack(expand=True, fill="both")

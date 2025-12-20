@@ -7,7 +7,7 @@ from tkinter import ttk, messagebox
 from datetime import timedelta
 from gui.bindings import bind_hierarchical, mousewheel_cb
 
-from gui.frames.common.scrollable import create_scrollable_frame, create_scrollable_treeview
+from gui.common.scrollable import create_scrollable_frame, create_scrollable_treeview
 from gui.helper import center_popup
 from networking.node import Node
 from networking.peer import Peer
@@ -16,8 +16,7 @@ from utils.config import APP_CONFIG
 from utils.fmt import format_age, format_bytes
 
 log = logging.getLogger(__name__)
-# TODO Save peers into peers.json
-# TODO Open separate windows with GUI to modify peers.json, allow setting of names/initial connect etc
+PEERS_SQL = APP_CONFIG.get("path", "peers")
 
 class ManagePeersFrame(tk.Frame):
     def __init__(self, parent, controller, node: Node):
@@ -82,9 +81,11 @@ class ManagePeersFrame(tk.Frame):
         self.lf_details.columnconfigure(0, weight=1)
 
         frame_details, cnv_details = create_scrollable_frame(self.lf_details, xscroll=False)
-
+        frame_details.rowconfigure(0, weight=1)
+        frame_details.columnconfigure(0, weight=1)
+        
         frame_details_content = ttk.Frame(frame_details, padding="5")
-        frame_details_content.pack(expand=True, fill="both") 
+        frame_details_content.grid(row=0, column=0, sticky="nsew") 
 
         detail_fields = [
             "Name", "Direction", "Peer ID", "Address", "User Agent",
@@ -104,21 +105,27 @@ class ManagePeersFrame(tk.Frame):
             label_value.grid(row=i, column=1, sticky="ew", padx=5, pady=2)
             self.labels_peer_details[field_name] = label_value
 
-        frame_details_content.columnconfigure(1, weight=1)
 
         btn_close_details = ttk.Button(frame_details, text="Close", command=self._hide_peer_details)
-        btn_close_details.pack(side="bottom", pady=10, anchor="w", padx=10)
+        btn_close_details.grid(row=i+1, column=1, sticky="w", padx=5, pady=5)
         
         btn_save_peer = ttk.Button(frame_details, text="Save", command=self._add_peer)
-        btn_save_peer.pack(side="bottom", pady=10, anchor="w", padx=10)
+        btn_save_peer.grid(row=i+1, column=0, sticky="w", padx=5, pady=5)
         bind_hierarchical("<MouseWheel>", self.lf_details, lambda e: mousewheel_cb(e, cnv_details))
         
         # 3. Initital setup
-        
         self._generate_peer_list_treeview()
         self._hide_peer_details()
+        
+        self._is_active = True
+    
+    def on_hide(self):
+        self._is_active = False
+        
+    def on_show(self):
+        self._is_active = True
         self._update()
-
+        
     def _generate_peer_list_treeview(self):
         latest_peers = list(self.node.peers)
         tree_peers_iids = set(self.tree_peers.get_children())
@@ -238,7 +245,7 @@ class ManagePeersFrame(tk.Frame):
         if not name:
             messagebox.showwarning("Failed to save peer", "Name cannot be empty!")
         else:
-            with sqlite3.connect(APP_CONFIG.get("path", "peers")) as con:
+            with sqlite3.connect(PEERS_SQL) as con:
                 cur = con.cursor()
                 
                 cur.execute("SELECT id FROM peers WHERE ip = ? AND port = ?", (ip, port))
@@ -259,6 +266,9 @@ class ManagePeersFrame(tk.Frame):
             messagebox.showinfo(title="Peer saved", message=f"Saved \"{name}\" to your peers.")
     
     def _update(self):
+        if not self._is_active:
+            return 
+        
         # Time updating
         for iid in self.tree_peers.get_children():
             peer = self.node.get_peer_by_id(int(iid))
@@ -267,7 +277,6 @@ class ManagePeersFrame(tk.Frame):
                 
         # Peer list updating
         if self.node.check_updated_peers():
-            print("UPDATE")
             self._generate_peer_list_treeview()
             if self.node.get_peer_by_id(self.selected_peer_id) is None:  # Selected peer disconnected
                 self.lf_details.config(text=self.lf_details.cget('text') + " (Disconnected)")

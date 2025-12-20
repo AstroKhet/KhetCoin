@@ -6,11 +6,12 @@ from tkinter import messagebox
 
 import sqlite3
 
-from gui.frames.common.scrollable import create_scrollable_treeview
+from gui.common.scrollable import create_scrollable_treeview
 from gui.helper import center_popup, copy_to_clipboard
 from utils.config import APP_CONFIG
 from utils.fmt import format_age, format_epoch
 
+PEERS_SQL = APP_CONFIG.get("path", "peers")
 
 class SavedPeersFrame(tk.Frame):
     def __init__(self, parent, controller, node):
@@ -100,11 +101,19 @@ class SavedPeersFrame(tk.Frame):
         self._selected_peer = None
         self._selected_iid = None
         self._generate_peers_treeview()
+        
+        self._is_active = True
+    
+    def on_hide(self):
+        self._is_active = False
+        
+    def on_show(self):
+        self._is_active = True
         self._update()
 
     def _load_peers(self):
         # Should only run once upon the first time loading this frame.
-        with sqlite3.connect(APP_CONFIG.get("path", "peers")) as con:
+        with sqlite3.connect(PEERS_SQL) as con:
             cur = con.cursor()
             cur.execute("SELECT * FROM peers")
             rows = cur.fetchall()
@@ -219,7 +228,7 @@ class SavedPeersFrame(tk.Frame):
             cmd = "UPDATE peers SET port = ? WHERE id = ?"
                         
         self.peers[self._selected_iid][field] = value
-        with sqlite3.connect(APP_CONFIG.get("path", "peers")) as con:
+        with sqlite3.connect(PEERS_SQL) as con:
             cur = con.cursor()
             cur.execute(cmd, (value, self._selected_iid))
         self.tree_peers.set(self._selected_iid, field, value)
@@ -283,7 +292,7 @@ class SavedPeersFrame(tk.Frame):
                 messagebox.showwarning("Failed to save peer", "Invalid IP address!")
                 return
             
-            with sqlite3.connect(APP_CONFIG.get("path", "peers")) as con:
+            with sqlite3.connect(PEERS_SQL) as con:
                 cur = con.cursor()
                 
                 cur.execute("SELECT id FROM peers WHERE ip = ? AND port = ?", (ip, port))
@@ -316,7 +325,7 @@ class SavedPeersFrame(tk.Frame):
         iid = self._selected_iid
         name = self.peers[iid]['name']
         if messagebox.askokcancel(title="Confirm deletion", message=f"Are you sure you want to remove \"{name}\" from your peers?"):
-            with sqlite3.connect(APP_CONFIG.get("path", "peers")) as con:
+            with sqlite3.connect(PEERS_SQL) as con:
                 cur = con.cursor()
                 cur.execute("DELETE FROM peers WHERE id = ?", (iid,))
             self.peers.pop(iid)
@@ -327,6 +336,9 @@ class SavedPeersFrame(tk.Frame):
 
         
     def _update(self):
+        if not self._is_active:
+            return
+        
         for iid in self.tree_peers.get_children():
             age = format_age(int(time.time()) - self.peers[int(iid)]["added"]) + " ago"
             self.tree_peers.set(iid, "added", age)

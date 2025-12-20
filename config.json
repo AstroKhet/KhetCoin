@@ -1,0 +1,190 @@
+{
+    "node": {
+        "name": {
+            "value": "Khet",
+            "type": "str",
+            "description": "The name given for your node, which is linked to your private key.",
+            "unit": null,
+            "display": true,
+            "configurable": false
+        },
+        "port": {
+            "value": 10219,
+            "type": "int",
+            "description": "Your IP port used to send and receive messages from other Khetcoin nodes specifically. This value is set to 10219 by default.",
+            "unit": null,
+            "display": true,
+            "configurable": true
+        },
+        "min_relay_fee_rate": {
+            "value": 100,
+            "type": "int",
+            "description": "Minimum fee rate (khets/KB) for your node to relay a transaction or store it into mempool.",
+            "unit": "khets/KB",
+            "display": true,
+            "configurable": true
+        },
+        "max_peers": {
+            "value": 8,
+            "type": "int",
+            "description": "Maximum number of peers your node will handle at once.",
+            "unit": null,
+            "display": true,
+            "configurable": true
+        },
+        "peer_inactive_timeout": {
+            "value": 10800,
+            "type": "int",
+            "description": "The amount of time your node will wait for a peer to send a message before disconnecting.",
+            "unit": "s",
+            "display": true,
+            "configurable": true
+        }
+    },
+    "mining": {
+        "mining_processes": {
+            "value": 5,
+            "type": "int",
+            "description": "No of cores/processes used for mining",
+            "unit": null,
+            "display": true,
+            "configurable": false
+        },
+        "tag": {
+            "value": "/Khet/",
+            "type": "str",
+            "description": "Your miner tag; included in the scriptSig of the coinbase transaction of whichever block you mined.",
+            "unit": null,
+            "display": true,
+            "configurable": true
+        }
+    },
+    "wallet": {
+        "min_change": {
+            "value": 0.01,
+            "type": "float",
+            "description": "The minimum change amount the wallet will try to generate per payment (if no exact match is found). This is to prevent the accumulation of UTXOs with very small values.",
+            "unit": "KTC",
+            "display": true,
+            "configurable": true
+        }
+    },
+    "app": {
+        "run_node_on_startup": {
+            "value": false,
+            "type": "bool",
+            "description": "Whether or not to run your node upon startup. It is recommended to keep this on for your blockchain to be synced to the latest version always.",
+            "unit": null,
+            "display": true,
+            "configurable": true
+        },
+        "copy_popup": {
+            "value": false,
+            "type": "bool",
+            "description": "Alerts the user when something is copied to clipboard.",
+            "unit": null,
+            "display": true,
+            "configurable": true
+        },
+        "initial_setup": {
+            "value": true,
+            "type": "bool",
+            "description": "If the user has setup Khetcoin App already.",
+            "unit": null,
+            "display": false,
+            "configurable": false
+        }
+    },
+    "path": {
+        "log": {
+            "value": ".local\\log.txt",
+            "type": "str",
+            "description": "",
+            "unit": null,
+            "display": true,
+            "configurable": false
+        },
+        "addresses": {
+            "value": ".local\\addresses.db",
+            "type": "str",
+            "description": "",
+            "unit": null,
+            "display": true,
+            "configurable": false
+        },
+        "peers": {
+            "value": ".local\\peers.db",
+            "type": "str",
+            "description": "",
+            "unit": null,
+            "display": true,
+            "configurable": false
+        },
+        "blockchain": {
+            "value": ".data\\blockchain\\",
+            "type": "str",
+            "description": "",
+            "unit": null,
+            "display": true,
+            "configurable": false
+        },
+        "lmdb": {
+            "value": ".data\\lmdb\\",
+            "type": "str",
+            "description": "",
+            "unit": null,
+            "display": true,
+            "configurable": false
+        },
+        "assets": {
+            "value": "assets\\",
+            "type": "str",
+            "description": "",
+            "unit": null,
+            "display": false,
+            "configurable": false
+        },
+        "transaction_history": {
+            "value": ".local\\transaction_history.json",
+            "type": "str",
+            "description": "",
+            "unit": null,
+            "display": false,
+            "configurable": false
+        },
+        "config": {
+            "value": "config.json",
+            "type": "str",
+            "description": "",
+            "unit": null,
+            "display": false,
+            "configurable": false
+        },
+        "keys": {
+            "value": ".local\\keys\\",
+            "type": "str",
+            "description": "",
+            "unit": null,
+            "display": false,
+            "configurable": false
+        }
+    },
+    "font": {
+        "mono": {
+            "value": "Courier New",
+            "type": "str",
+            "description": "",
+            "unit": null,
+            "display": false,
+            "configurable": false
+        },
+        "sans": {
+            "value": "Segoe UI",
+            "type": "str",
+            "description": "",
+            "unit": null,
+            "display": false,
+            "configurable": false
+        }
+    }
+}
