@@ -328,7 +328,7 @@ class Node:
             # 1. Clear inactive peers
             for peer in list(self.peers):
                 if peer.last_recv > timeout:
-                    self.remove_peer(peer)
+                    await peer.close()
                     log.info(f"Removed inactive peer {peer}")
                     
             await asyncio.sleep(1)
@@ -356,7 +356,6 @@ class Node:
         await self.close_server()
 
     def remove_peer(self, peer: Peer):
-        peer.close()
         self.peers.discard(peer)
         self.peer_id_lookup.pop(peer.session_id)
         self._updated_peers = 0

@@ -291,8 +291,8 @@ class MessageProcessor:
                     await peer.send_message(tx_msg)   
                     
             elif inv_type == BLOCK_TYPE:
-                if block := get_raw_block(inv_hash):
-                    block_msg = BlockMessage(block)
+                if block_raw := get_raw_block(inv_hash):
+                    block_msg = BlockMessage(block_raw)
                     await peer.send_message(block_msg)
 
 
