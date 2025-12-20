@@ -5,9 +5,8 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import font
 
-from setup.database import init_db
-from utils.config import APP_CONFIG
 
+from utils.config import APP_CONFIG
 
 
 def INITIAL_SETUP():
@@ -25,6 +24,7 @@ def INITIAL_SETUP():
     KEYS_DIR.mkdir(parents=True, exist_ok=True)
     
     # 2. DB files
+    from setup.database import init_db
     init_db()
 
     # 3. Fonts
