@@ -69,7 +69,7 @@ class Node:
         try:
             upnp = miniupnpc.UPnP()
             upnp.discoverdelay = 200
-            upnp.discover()
+            upnp.discover();
             upnp.selectigd()
             upnp.addportmapping(
                 self.port, "TCP",
@@ -77,7 +77,8 @@ class Node:
                 f"MyNode-{self.name}", ""
             )
         except Exception as e:
-            if "ConflictInMappingEntry" not in str(e):
+            msg = str(e)
+            if "ConflictInMappingEntry" not in msg and "Success" not in msg:
                 log.warning(f"UPnP port forwarding failed: {e}")
                 return None
 
@@ -93,10 +94,9 @@ class Node:
 
             log.info(f"Server listening on {addr}")
         except Exception as e:
-            msg = str(e)
-            if "ConflictInMappingEntry" not in msg and "Success" not in msg:
-                log.warning(f"UPnP port forwarding failed: {e}")
-                return None
+            log.exception(f"Error starting server: {e}")
+            self.server = None
+            self._shutdown_requested.set()
 
         self.is_running = True
         
