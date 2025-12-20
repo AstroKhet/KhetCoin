@@ -1,15 +1,9 @@
-
-
-
 from multiprocessing import Process, Value, cpu_count
 from ctypes import c_ubyte
 import os
 import threading
 
-from coincurve import PrivateKey
-
-from crypto.hashing import HASH160
-from crypto.key import private_key_to_wif, wif_encode
+from crypto.key import private_key_to_wif
 
 
 class KeyGenerator:

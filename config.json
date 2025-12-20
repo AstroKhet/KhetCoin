@@ -1,17 +1,43 @@
 {
-    "node": {
+    "app": {
         "name": {
-            "value": "Khet",
+            "value": "",
             "type": "str",
             "description": "The name given for your node, which is linked to your private key.",
             "unit": null,
             "display": true,
             "configurable": false
         },
+        "run_node_on_startup": {
+            "value": false,
+            "type": "bool",
+            "description": "Whether or not to run your node upon startup. It is recommended to keep this on for your blockchain to be synced to the latest version always.",
+            "unit": null,
+            "display": true,
+            "configurable": true
+        },
+        "copy_popup": {
+            "value": false,
+            "type": "bool",
+            "description": "Alerts the user when something is copied to clipboard.",
+            "unit": null,
+            "display": true,
+            "configurable": true
+        },
+        "initial_setup": {
+            "value": false,
+            "type": "bool",
+            "description": "If the user has setup Khetcoin App already.",
+            "unit": null,
+            "display": false,
+            "configurable": false
+        }
+    },
+    "node": {
         "port": {
-            "value": 10219,
+            "value": 8666,
             "type": "int",
-            "description": "Your IP port used to send and receive messages from other Khetcoin nodes specifically. This value is set to 10219 by default.",
+            "description": "Your IP port used to send and receive messages from other Khetcoin nodes specifically. This is 8666 by default.",
             "unit": null,
             "display": true,
             "configurable": true
@@ -43,7 +69,7 @@
     },
     "mining": {
         "mining_processes": {
-            "value": 5,
+            "value": 1,
             "type": "int",
             "description": "No of cores/processes used for mining",
             "unit": null,
@@ -51,7 +77,7 @@
             "configurable": false
         },
         "tag": {
-            "value": "/Khet/",
+            "value": "",
             "type": "str",
             "description": "Your miner tag; included in the scriptSig of the coinbase transaction of whichever block you mined.",
             "unit": null,
@@ -67,32 +93,6 @@
             "unit": "KTC",
             "display": true,
             "configurable": true
-        }
-    },
-    "app": {
-        "run_node_on_startup": {
-            "value": false,
-            "type": "bool",
-            "description": "Whether or not to run your node upon startup. It is recommended to keep this on for your blockchain to be synced to the latest version always.",
-            "unit": null,
-            "display": true,
-            "configurable": true
-        },
-        "copy_popup": {
-            "value": false,
-            "type": "bool",
-            "description": "Alerts the user when something is copied to clipboard.",
-            "unit": null,
-            "display": true,
-            "configurable": true
-        },
-        "initial_setup": {
-            "value": true,
-            "type": "bool",
-            "description": "If the user has setup Khetcoin App already.",
-            "unit": null,
-            "display": false,
-            "configurable": false
         }
     },
     "path": {

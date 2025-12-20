@@ -6,6 +6,7 @@ from tkinter import ttk, messagebox
 from crypto.key import private_key_to_wif, save_private_key
 from crypto.keygen import KeyGenerator
 from gui.helper import reset_widget
+from utils.config import APP_CONFIG
     
 class SetupApp():
     def __init__(self):
@@ -83,9 +84,6 @@ class SetupApp():
 
         ttk.Button(frame, text="Confirm", command=on_confirm).pack(pady=10)
 
-
-        
-        return 
         
     def show_addr_frame(self):
         reset_widget(self.view_container)
@@ -139,8 +137,8 @@ class SetupApp():
             )
 
         ttk.Button(prefix_frame, text="?", width=2, command=show_prefix_info).pack(side="left", padx=5)
-        return
-        
+
+
     def show_done_frame(self):
         reset_widget(self.view_container)
         frame = tk.Frame(self.view_container)
@@ -158,6 +156,8 @@ class SetupApp():
 
         def save():
             save_private_key(self.priv_key, self.name)
+            APP_CONFIG.set("app", "name", self.name)
+            APP_CONFIG.set("mining", "tag", f"/{self.name}/")
             self._close()
             
         btn_save = ttk.Button(btn_frame, text="Confirm", command=save)
@@ -171,6 +171,7 @@ class SetupApp():
                 self.show_welcome_frame()
         btn_redo = ttk.Button(btn_frame, text="Reset", command=on_redo)
         btn_redo.pack(side="left", padx=5)
+
 
     def _on_keygen_generate(self):
         prefix = self.prefix_var.get()

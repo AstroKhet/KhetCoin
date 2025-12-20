@@ -1,10 +1,11 @@
+from setup.functions import INITIAL_SETUP, RUNTIME_SETUP
 
 def main():
     from utils.config import APP_CONFIG
 
     if not APP_CONFIG.get("app", "initial_setup"):
         from setup.setup import SetupApp
-        from setup.functions import INITIAL_SETUP, RUNTIME_SETUP
+        
 
         setup_app = SetupApp()
         setup_app.main()
@@ -15,7 +16,7 @@ def main():
     from gui.app import KhetcoinApp
 
     node_kwargs = {
-        "name": APP_CONFIG.get("node", "name"),
+        "name": APP_CONFIG.get("app", "name"),
         "host": "0.0.0.0",
         "port": APP_CONFIG.get("node", "port")
     }

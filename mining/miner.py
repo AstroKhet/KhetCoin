@@ -76,15 +76,18 @@ class Miner:
     def _initiate_miners(self, candidate_block: Block, cb_outputs: list[TransactionOutput]) -> Block | None:
         # 1. Initial spawning of mining worker processes
         log.info(f'Initiating {self.no_processes} mining processes.')
+        
         height = get_blockchain_height() + 1
         miner_tag = str(APP_CONFIG.get("mining", "tag")).encode("utf-8")
+        cmds = [int_to_bytes(height, 8), int_to_bytes(0, 64)]
+        if miner_tag:
+            cmds.append(miner_tag)
+        script_sig = Script(cmds)
         
-        script_sig = Script([int_to_bytes(height, 8), int_to_bytes(0, 64), miner_tag])
         cb_tx = build_coinbase_tx(script_sig, cb_outputs)
         header = candidate_block.header
         candidate_block.set_coinbase_tx(cb_tx)
         
-
         for i in range(self.no_processes):
             proc = Process(
                 target=miner,
@@ -194,11 +197,10 @@ def miner(
         for sig_nonce in range(1 << 64):
             # ScriptSig format for coinbase transactions:
             # <Height 8B> <nonce 64B> <tag ?B>
-            cb_tx.inputs[0].script_sig = Script(
-                [int_to_bytes(height, 8), 
-                 int_to_bytes(sig_nonce, 64), 
-                 miner_tag]
-            )
+            cmds = [int_to_bytes(height, 8), int_to_bytes(sig_nonce, 64)]
+            if miner_tag:
+                cmds.append(miner_tag)
+            cb_tx.inputs[0].script_sig = Script(cmds)
             
             merkle_tree.update_leaf(0, cb_tx.hash())
             header.set_merkle_root(merkle_tree.root())
