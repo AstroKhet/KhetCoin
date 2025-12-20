@@ -302,9 +302,9 @@ class SavedPeersFrame(tk.Frame):
                 
                 added = int(time.time())
                 cur.execute("""
-                    INSERT INTO peers (name, ip, port, added)
-                    VALUES (?, ?, ?, ?)
-                """, (name, ip, port, added))
+                    INSERT INTO peers (name, ip, port, added, last_seen, services)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (name, ip, port, added, int(time.time()), 0))
             
                 con.commit()
                 cur.execute("SELECT id FROM peers WHERE ip = ? and port = ?", (ip, port))

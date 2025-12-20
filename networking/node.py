@@ -327,7 +327,7 @@ class Node:
             
             # 1. Clear inactive peers
             for peer in list(self.peers):
-                if now - peer.last_recv > timeout:
+                if peer.last_recv > timeout:
                     self.remove_peer(peer)
                     log.info(f"Removed inactive peer {peer}")
                     

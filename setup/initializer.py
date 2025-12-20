@@ -60,7 +60,8 @@ def init_db():
                 port INTEGER,
                 added INTEGER,
                 last_seen INTEGER,
-                services INTEGER
+                services INTEGER,
+                UNIQUE(ip, port)
             );""")
         con.commit()
         

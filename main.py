@@ -12,7 +12,6 @@ def main():
             init_folders()
             setup_app = SetupApp()
             setup_app.main()
-            print("call init db")
             init_db()
             init_font()
 
