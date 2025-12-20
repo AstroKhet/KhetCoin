@@ -88,7 +88,7 @@ class Node:
                 if "ConflictInMappingEntry" in str(e):
                     log.info(f"UPnP mapping for port {external_port} already exists, using it")
                 else:
-                    return None
+                    raise
 
             return upnp.externalipaddress()
 
