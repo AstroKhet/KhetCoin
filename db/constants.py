@@ -39,6 +39,7 @@ DAT_SIZE = 10 * (1 << 20) # Max .dat file size: 10 MiB
 # LMDB ENVIRONMENT
 # =============================================================================
 LMDB_DIR = APP_CONFIG.get("path", "lmdb")
+LMDB_DIR.mkdir(parents=True, exist_ok=True)
 LMDB_ENV = lmdb.open(str(LMDB_DIR), map_size=MAP_SIZE, max_dbs=10)
 
 
