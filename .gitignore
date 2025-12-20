@@ -1,16 +1,10 @@
 # Ignore all hidden folders
-
+.*
 
 # Ignore Python bytecode cache
 __pycache__/
 *.py[cod]
 
-# Ignore all .dat files
-*.dat
-
-# Ignore all .mdb files
-*.mdb
-*.db
 
 # Ignore all scratch* files
 scratch*.py
