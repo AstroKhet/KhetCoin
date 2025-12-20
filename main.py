@@ -1,3 +1,4 @@
+from setup.initializer import init_folders, init_font
 from setup.functions import INITIAL_SETUP, RUNTIME_SETUP
 
 def main():
@@ -6,9 +7,15 @@ def main():
     if not APP_CONFIG.get("app", "initial_setup"):
         try:
             from setup.setup import SetupApp
+            from setup.initializer import init_db
+    
+            init_folders()
             setup_app = SetupApp()
             setup_app.main()
-            INITIAL_SETUP()
+            print("call init db")
+            init_db()
+            init_font()
+
             
             APP_CONFIG.set("app", "initial_setup", True)
         except Exception as e:

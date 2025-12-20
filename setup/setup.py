@@ -108,7 +108,7 @@ class SetupApp():
         def on_confirm():
             if messagebox.askyesno(
                 "Confirm address",
-                f"Is this name correct?\n\n{private_key_to_wif(self.priv_key)}\n\nYou cannot change this later",
+                f"Is this address correct?\n\n{private_key_to_wif(self.priv_key)}\n\nYou cannot change this later",
             ):
                 self.show_done_frame()
                 

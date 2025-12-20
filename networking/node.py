@@ -10,7 +10,7 @@ from blockchain.block import Block
 from crypto.hashing import HASH160
 from crypto.key import get_public_key
 from db.index import BlockIndex, get_block_tip_index
-from db.peers import load_all_peers, load_peers
+from db.peers import load_all_peers
 from mining.mempool import Mempool
 from mining.miner import Miner
 from networking.constants import CONNECTION_TIMEOUT, HANDSHAKE_TIMEOUT
@@ -307,7 +307,8 @@ class Node:
 
     async def _connect_initial_peers(self):
         log.info("Connecting to initial peers...")
-        peers_to_connect = await load_all_peers()[:APP_CONFIG.get("node", "max_peers")]
+        peers_to_connect = await load_all_peers()
+        peers_to_connect = peers_to_connect[:APP_CONFIG.get("node", "max_peers")]
         if not peers_to_connect:
             return 
 

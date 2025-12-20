@@ -44,6 +44,7 @@ def save_private_key(priv_key: bytes | PrivateKey, name: str = "") -> None:
     if priv_key_path.exists():
         raise ValueError(f"{name} already exists. Please choose a different name.")
 
+    priv_key_path.touch()
     with open(priv_key_path, "wb") as private_key_dat:
         private_key_dat.write(priv_key_bytes)
     print(f"Private Key \"{name}\" saved at {priv_key_path}")

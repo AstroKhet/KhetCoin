@@ -3,8 +3,11 @@ Setup file to create LMDB database and save genesis block
 """
 
 from math import floor
+from pathlib import Path
 import sqlite3
 import time
+import tkinter as tk
+from tkinter import font
 
 from crypto.hashing import HASH256
 from db.constants import ADDR_DB, HEIGHT_DB, INDEX_DB, LMDB_ENV, BLOCK_MAGIC, BLOCKS_DB, TX_DB, UTXO_DB
@@ -18,6 +21,20 @@ PEERS_SQL = APP_CONFIG.get("path", "peers")
 BLOCKCHAIN_DIR = APP_CONFIG.get("path", "blockchain")
 
 
+
+
+def init_folders():
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    
+    BLOCKCHAIN_DIR = BASE_DIR / ".data" / "blockchain"
+    BLOCKCHAIN_DIR.mkdir(parents=True, exist_ok=True)
+    
+    LMDB_DIR = BASE_DIR / ".data" / "lmdb"
+    LMDB_DIR.mkdir(parents=True, exist_ok=True)
+    
+    KEYS_DIR = BASE_DIR / ".local" / "keys"
+    KEYS_DIR.mkdir(parents=True, exist_ok=True)
+    
 def init_db():
     # 1. SQL files (.db)
     # 1.1 Saved Wallet Address SQL
@@ -50,9 +67,10 @@ def init_db():
         # Bootstrap peer (Khet himself)
         cur.execute("""
             INSERT INTO peers (name, ip, port, added, last_seen, services) 
-            VALUES (?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
         """, ("Khet", "128.106.117.21", 8666, int(time.time()), 0, 1)
         )
+        print("execute save khet perererer")
         con.commit()
         
     # 2. LMDB files (.mdb)
@@ -121,3 +139,20 @@ def init_db():
         # 6. Save to ADDR
         db_tx.put(CB_TX_OUTPUT[12:32], outpoint, db=ADDR_DB)
         
+def init_font():
+    MONO_STACK = ["Courier New", "Courier", "Liberation Mono", "Monospace"]
+    SANS_STACK = ["Segoe UI", "Helvetica", "Arial", "Sans"]
+    
+    _temp_root = tk.Tk()
+    _temp_root.withdraw() 
+    APP_CONFIG.set("font", "mono", _pick_family(MONO_STACK))
+    APP_CONFIG.set("font", "sans", _pick_family(SANS_STACK))
+    _temp_root.destroy()
+
+def _pick_family(stack):
+    """Return the first available font family from the stack."""
+    available = list(font.families())
+    for f in stack:
+        if f in available:
+            return f
+    return "TkDefaultFont"
