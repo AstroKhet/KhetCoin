@@ -37,14 +37,11 @@ def INITIAL_SETUP():
     APP_CONFIG.set("font", "sans", _pick_family(SANS_STACK))
     _temp_root.destroy()
 
-
-    # . Flag initial setup as complete
-    APP_CONFIG.set("app", "initial_setup", True)
     return True
 
 
 # TODO: param n & filename used for logging 2 nodes on one computer ONLY
-def RUNTIME_SETUP(n=""):
+def RUNTIME_SETUP():
     """Setup for each time main.py is run"""
     if APP_CONFIG.get("app", "initial_setup"):
         INITIAL_SETUP()
@@ -53,7 +50,7 @@ def RUNTIME_SETUP(n=""):
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(filename)s - %(message)s",
         # filename=APP_CONFIG.get("path", "log"),
-        filename=APP_CONFIG.BASE_DIR / f".local/log-{n}.txt",
+        filename=APP_CONFIG.get("path", "log"),
         filemode="w",
         force=True
     )

@@ -4,12 +4,16 @@ def main():
     from utils.config import APP_CONFIG
 
     if not APP_CONFIG.get("app", "initial_setup"):
-        from setup.setup import SetupApp
-        
-
-        setup_app = SetupApp()
-        setup_app.main()
-        INITIAL_SETUP()
+        try:
+            from setup.setup import SetupApp
+            setup_app = SetupApp()
+            setup_app.main()
+            INITIAL_SETUP()
+            
+            APP_CONFIG.set("app", "initial_setup", True)
+        except Exception as e:
+            print(f"Initial setup failed: {e}")
+            return
 
     RUNTIME_SETUP()
 
@@ -17,7 +21,6 @@ def main():
 
     node_kwargs = {
         "name": APP_CONFIG.get("app", "name"),
-        "host": "0.0.0.0",
         "port": APP_CONFIG.get("node", "port")
     }
 

@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-import os
 import webbrowser
 
 from gui.bindings import bind_hierarchical, mousewheel_cb
@@ -161,13 +160,14 @@ class SettingsFrame(tk.Frame):
             widget.grid_forget() 
             
     def _goto_folder(self, subpath):
-        path = os.path.join(APP_CONFIG.BASE_DIR, subpath)
-        folder = os.path.dirname(path)
-        if os.path.isdir(folder):
-            webbrowser.open(folder)
+        path = APP_CONFIG.BASE_DIR / subpath
+        folder = path.parent
+
+        if folder.exists() and folder.is_dir():
+            webbrowser.open(str(folder))
         else:
-            messagebox.showwarning("Folder not found", folder)
-         
+            messagebox.showwarning("Folder not found", f"Folder does not exist:\n{folder}")
+            
 
         
         
