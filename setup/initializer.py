@@ -71,7 +71,6 @@ def init_db():
             VALUES (?, ?, ?, ?, ?, ?)
         """, ("Khet", "128.106.117.21", 8666, int(time.time()), 0, 1)
         )
-        print("execute save khet perererer")
         con.commit()
         
     # 2. LMDB files (.mdb)
