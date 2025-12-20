@@ -72,13 +72,26 @@ class Node:
             upnp.discover()
             upnp.selectigd()
 
-            external_port = self.port
-            internal_port = self.port
-            protocol = 'TCP'
+            external_port = internal_port = self.port
+            try:
+                upnp.addportmapping(
+                    external_port,
+                    "TCP",
+                    upnp.lanaddr,
+                    internal_port,
+                    f"MyNode-{self.name}",
+                    ""
+                )
+                log.info(f"Port {external_port} forwarded via UPnP to {upnp.lanaddr}:{internal_port}")
 
-            upnp.addportmapping(external_port, protocol, upnp.lanaddr, internal_port, f"MyNode-{self.name}", '')
-            log.info(f"Port {external_port} forwarded via UPnP to {upnp.lanaddr}:{internal_port}")
+            except Exception as e:
+                if "ConflictInMappingEntry" in str(e):
+                    log.info(f"UPnP mapping for port {external_port} already exists, using it")
+                else:
+                    return None
+
             return upnp.externalipaddress()
+
         except Exception as e:
             log.warning(f"UPnP port forwarding failed: {e}")
             return None
