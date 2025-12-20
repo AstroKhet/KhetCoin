@@ -144,7 +144,7 @@ class Peer:
             services=SERVICES,
             recver_ip=self.addr[0],
             recver_port=self.addr[1],
-            sender_ip=self.node.host,
+            sender_ip=self.node.external_ip,
             sender_port=self.node.port,
             nonce=nonce,
             start_height=start_height,
