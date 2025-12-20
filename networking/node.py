@@ -71,31 +71,18 @@ class Node:
             upnp.discoverdelay = 200
             upnp.discover()
             upnp.selectigd()
-
-            external_port = internal_port = self.port
-            try:
-                upnp.addportmapping(
-                    external_port,
-                    "TCP",
-                    upnp.lanaddr,
-                    internal_port,
-                    f"MyNode-{self.name}",
-                    ""
-                )
-                log.info(f"Port {external_port} forwarded via UPnP to {upnp.lanaddr}:{internal_port}")
-
-            except Exception as e:
-                if "ConflictInMappingEntry" in str(e):
-                    log.info(f"UPnP mapping for port {external_port} already exists, using it")
-                else:
-                    raise
-
-            return upnp.externalipaddress()
-
+            upnp.addportmapping(
+                self.port, "TCP",
+                upnp.lanaddr, self.port,
+                f"MyNode-{self.name}", ""
+            )
         except Exception as e:
-            log.warning(f"UPnP port forwarding failed: {e}")
-            return None
-        
+            if "ConflictInMappingEntry" not in str(e):
+                log.warning(f"UPnP port forwarding failed: {e}")
+                return None
+
+        return upnp.externalipaddress()
+    
     async def start_server(self):
         try:
             self.server = await asyncio.start_server(
