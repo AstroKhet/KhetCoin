@@ -286,7 +286,7 @@ class Node:
                     log.info(f"[{peer.str_ip}] Removed inactive peer.")
 
                 if (peer.height - self.block_tip_index.height >= 5) and (peer.last_block_ago >= 30):
-                     peer.send_message(
+                     await peer.send_message(
                          GetBlocksMessage(
                              PROTOCOL_VERSION,
                              locator_hashes=get_block_locator_hashes(),
@@ -334,7 +334,7 @@ class Node:
         )
 
         for peer in target_peers:
-            asyncio.run_coroutine_threadsafe(peer.send_message(message), self.loop)
+            self.add_task(asyncio.create_task(peer.send_message(message)))
 
     def remove_peer(self, peer: Peer):
         self.peers.discard(peer)
