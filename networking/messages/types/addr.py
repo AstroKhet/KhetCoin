@@ -24,7 +24,8 @@ class AddrMessage:
             lines.append(f"    Services:  {hex(services)}")
             lines.append(f"    IP:        {format_ip(ip)}")
             lines.append(f"    Port:      {port}")
-
+        return lines
+        
     @classmethod
     def parse(cls, stream: BinaryIO):
         count = read_varint(stream)
