@@ -216,11 +216,9 @@ class MessageProcessor:
         if common_hash is None:
             return
         # Collecting block hashes
-        curr_height = get_block_height_at_hash(common_hash)
-        if curr_height is None:
-            return
-        
+        curr_height = get_block_height_at_hash(common_hash) + 1
         block_hashes = []
+        
         while len(block_hashes) < GETBLOCKS_LIMIT:
             curr_hash = get_block_hash_at_height(curr_height)
             if curr_hash is None:  # You have reached the tip of the blockchain
@@ -235,7 +233,7 @@ class MessageProcessor:
 
             curr_height += 1
 
-        block_inv = [(BLOCK_TYPE, block_hash) for block_hmethash in block_hashes]
+        block_inv = [(BLOCK_TYPE, block_hash) for block_hash in block_hashes]
         if block_inv:
             inv_msg = InvMessage(block_inv)
             await peer.send_message(inv_msg)

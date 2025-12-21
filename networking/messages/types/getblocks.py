@@ -22,7 +22,7 @@ class GetBlocksMessage:
         self.payload += hash_stop
         
     def __str__(self):
-        lines = ["getblocks"]
+        lines = ["[getblocks]"]
         
         for i, hash in enumerate(self.locator_hashes):
             lines.append(f"  Locator hash {i}: {hash.hex()}")
