@@ -104,8 +104,9 @@ class MessageProcessor:
                 (inv_type, inv_hash)
             )
         
-        getdata_msg = GetDataMessage(missing_inventory)
-        await peer.send_message(getdata_msg)
+        if missing_inventory:
+            getdata_msg = GetDataMessage(missing_inventory)
+            await peer.send_message(getdata_msg)
 
     async def process_getaddr(self, peer: Peer, msg: GetAddrMessage):
         addresses = set()
@@ -126,13 +127,8 @@ class MessageProcessor:
         
         if active_peers:
             active_peers = active_peers[:GETADDR_LIMIT]
-            for peer_id, ip, port, added, last_seen, services in active_peers:
-                addr = (
-                    int_to_bytes(last_seen),
-                    int_to_bytes(services, 8),
-                    encode_ip(ip),
-                    int_to_bytes(port, 2)
-                )
+            for peer_id, name, ip, port, added, last_seen, services in active_peers:
+                addr = (last_seen, services, ip, port)
                 addresses.add(addr)
 
             addr_msg = AddrMessage(list(addresses))

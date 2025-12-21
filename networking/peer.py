@@ -4,6 +4,7 @@ from random import randint
 import time
 from typing import List
 
+from db.block import get_block_locator_hashes
 from db.height import get_blockchain_height
 from db.peers import set_last_seen
 from networking.constants import PING_TIMEOUT, USER_AGENT
@@ -157,7 +158,16 @@ class Peer:
             payload=version_message.payload,
         )
         await self.send_message(version_envelopeelope)
-
+    
+    async def send_getblocks(self):
+        await self.send_message(
+            GetBlocksMessage(
+                PROTOCOL_VERSION,
+                locator_hashes=get_block_locator_hashes(),
+                hash_stop=bytes(32)                             
+            )
+        )
+        
     async def listen(self) -> None:
         while True:
             if self.reader.at_eof():

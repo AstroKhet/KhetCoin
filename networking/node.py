@@ -206,6 +206,8 @@ class Node:
                 self.peers.add(peer)
                 self._updated_peers = 0
                 await peer.send_message(GetAddrMessage())
+                if peer.height > self.block_tip_index.height:
+                    await peer.send_getblocks()
             else:
                 log.warning(f"[{peer.str_ip}] Handshake failed or rejected .")
         
@@ -253,6 +255,8 @@ class Node:
                 
                 if initial:
                     self.add_task(asyncio.create_task(peer.send_message(MempoolMessage())))
+                if peer.height > self.block_tip_index.height:
+                    await peer.send_getblocks()
             else:
                 log.info(f"[{peer_str_ip}] Handshake failed.")
         except Exception as e:
@@ -285,13 +289,7 @@ class Node:
                     log.info(f"[{peer.str_ip}] Removed inactive peer.")
 
                 if (peer.height - self.block_tip_index.height >= 5) and (peer.last_block_ago >= 30):
-                     await peer.send_message(
-                         GetBlocksMessage(
-                             PROTOCOL_VERSION,
-                             locator_hashes=get_block_locator_hashes(),
-                             hash_stop=bytes(32)                             
-                         )
-                     )
+                     await peer.send_getblocks()
                     
             await asyncio.sleep(1)
                 
