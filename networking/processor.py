@@ -268,26 +268,37 @@ class MessageProcessor:
 
 
     async def process_block(self, peer: Peer, msg: BlockMessage):
+        print(f"[process_block] received block from peer {peer}")
+
         block_raw = msg.block
         block = Block.parse(BytesIO(block_raw))
+        block_hash = block.hash()
 
-        # DEBUGGING ONLY
-        print(block.get_height())
-        # 0.1 Block already seen & saved
-        if get_block_exists(block.hash()):
+        print(f"[process_block] block hash={block_hash.hex()} height={block.get_height()}")
+
+        # 0.1 Block already seen
+        if get_block_exists(block_hash):
+            print("[process_block] return: block already exists")
             return
-        
+
         # 0.2 Orphan block
         if not get_block_exists(block.prev_block):
+            print(f"[process_block] orphan block (missing prev={block.prev_block.hex()})")
             self.node.orphan_blocks.add(block)
+            print(f"[process_block] orphan pool size={len(self.node.orphan_blocks)}")
             return
-        
-        # 1. Now we know that the block is valid and extends off the blockchain DAG somewhere
+
+        # 1. Process valid block
+        print("[process_block] processing new block")
         process_new_block(block, self.node)
-        
-        # 2. If the block is successfully verified & saved, this tells us that the peer is at least at that block's height
-        if index := get_block_index(block.hash()):
+
+        # 2. Update peer height
+        index = get_block_index(block_hash)
+        if index:
             peer.height = index.height
+            print(f"[process_block] updated peer height to {peer.height}")
+        else:
+            print("[process_block] warning: block index not found after processing")
 
 
 
