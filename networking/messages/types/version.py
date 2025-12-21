@@ -9,7 +9,7 @@ from utils.helper import encode_ip, format_ip, int_to_bytes, bytes_to_int
 class VersionMessage:
     command = b"version"
     def __init__(
-        self, version: int = PROTOCOL_VERSION, services: int = SERVICES, timestamp: int = int(time.time()),
+        self, version: int = PROTOCOL_VERSION, services: int = SERVICES, timestamp: int = 0,
         recver_services: int = 0, recver_ip: bytes | str = "", recver_port: int = NETWORK_PORT,
         sender_services: int = 0, sender_ip: bytes | str = "", sender_port: int = NETWORK_PORT,
         nonce: int = 0,
@@ -19,7 +19,7 @@ class VersionMessage:
     ):
         self.version = version
         self.services = services
-        self.timestamp = timestamp
+        self.timestamp = timestamp or int(time.time())
 
         self.recver_services = recver_services
         self.recver_ip = encode_ip(recver_ip)

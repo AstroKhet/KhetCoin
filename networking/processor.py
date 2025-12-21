@@ -240,9 +240,9 @@ class MessageProcessor:
             curr_height += 1
 
         block_inv = [(BLOCK_TYPE, block_hash) for block_hash in block_hashes]
-        inv_msg = InvMessage(block_inv)
-
-        await peer.send_message(inv_msg)
+        if block_inv:
+            inv_msg = InvMessage(block_inv)
+            await peer.send_message(inv_msg)
 
     async def process_block(self, peer: Peer, msg: BlockMessage):
         block_raw = msg.block
@@ -306,7 +306,8 @@ class MessageProcessor:
     async def process_mempool(self, peer: Peer, msg: MempoolMessage):
         """Returns an `inv` message containing the transaction hashes of all valid mempool transactions"""
         inventory = [(TX_TYPE, tx.hash()) for tx in self.node.mempool.get_all_valid_tx()]
-        inv_msg = InvMessage(inventory)
-        await peer.send_message(inv_msg)
+        if inventory:
+            inv_msg = InvMessage(inventory)
+            await peer.send_message(inv_msg)
 
 

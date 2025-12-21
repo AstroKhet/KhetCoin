@@ -237,16 +237,13 @@ class Peer:
     @property
     def last_send_ago(self) -> int | None:  # Last time YOU sent to PEER
         """Returns how long ago you sent a message from this peer"""
-        if self.last_send_timestamp:
-            return int(time.time()) - self.last_send_timestamp
-        return None
+        return int(time.time()) - self.last_send_timestamp
+
 
     @property
     def last_recv_ago(self) -> int | None:  # Last time PEER sent to YOU
         """Returns how long ago you received a message from this peer"""
-        if self.last_recv_timestamp:
-            return int(time.time()) - self.last_recv_timestamp
-        return None
+        return int(time.time()) - self.last_recv_timestamp
 
     def __hash__(self):
         return self.session_id

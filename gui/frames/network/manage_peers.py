@@ -11,7 +11,6 @@ from gui.bindings import bind_hierarchical, mousewheel_cb
 from gui.common.scrollable import create_scrollable_frame, create_scrollable_treeview
 from gui.helper import center_popup
 from networking.node import Node
-from networking.peer import Peer
 
 from utils.config import APP_CONFIG
 from utils.fmt import format_age, format_bytes
@@ -57,7 +56,6 @@ class ManagePeersFrame(tk.Frame):
 
         # 1.2 Bottom-Left: Scrollable Peer List Area
         peer_list_cols = {
-            "id": ("Peer ID", 30),
             "name": ("Name", 100),
             "address": ("Address", 150),
             "user_agent": ("User Agent", 80),
@@ -133,7 +131,6 @@ class ManagePeersFrame(tk.Frame):
         # 1. Add or update peers
         for peer in latest_peers:
             values = (
-                peer.session_id,
                 peer.name or "N/A",
                 peer.str_ip,
                 peer.user_agent.decode(),
