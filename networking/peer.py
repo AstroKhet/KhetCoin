@@ -87,7 +87,7 @@ class Peer:
             self.node.bytes_recv += envelope.payload_size
             self.last_recv_timestamp = int(time.time())
             
-            print(type(envelope.message))
+            print("RECEIVE", type(envelope.message))
             if isinstance(envelope.message, BlockMessage):
                 self.last_block_timestamp = self.last_recv_timestamp
             elif isinstance(envelope.message, TxMessage):
@@ -106,6 +106,7 @@ class Peer:
 
     async def send_message(self, msg):
         """Sends `msg` to this peer"""
+        
         if isinstance(msg, MessageEnvelope):
             envelope = msg
         elif isinstance(msg, CORE_MESSAGES):
@@ -119,6 +120,7 @@ class Peer:
         log.info(f"[{self.str_ip}] Sending message: {cmd} ({len(serialized_envelope)} bytes)")
 
         try:
+            print("SEND", type(envelope.message))
             self.writer.write(serialized_envelope)
             await self.writer.drain()
 
