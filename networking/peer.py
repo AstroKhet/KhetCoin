@@ -52,10 +52,10 @@ class Peer:
         self.time_created: int = int(time.time())
 
         # Tracking
-        self.last_block_timestamp: int | None = None
-        self.last_tx_timestamp: int | None = None
-        self.last_send_timestamp: int | None = None
-        self.last_recv_timestamp: int | None = None
+        self.last_block_timestamp: int = 0
+        self.last_tx_timestamp: int = 0
+        self.last_send_timestamp: int = 0
+        self.last_recv_timestamp: int = 0
 
         self.bytes_recv: int = 0
         self.bytes_sent: int = 0
