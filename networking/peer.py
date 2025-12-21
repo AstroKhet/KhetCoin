@@ -83,7 +83,7 @@ class Peer:
         try:
             envelope = await MessageEnvelope.parse_async(self.reader)
 
-            log.info(f"[{self.str_ip}] Received message: {envelope}")
+            log.info(f"[{self.str_ip}] Received message: \n{envelope}")
             return envelope
         except ValueError:
             return None
@@ -108,7 +108,7 @@ class Peer:
         
         cmd = envelope.command.decode("ascii", errors="replace")
         serialized_envelope = envelope.serialize()
-        log.info(f"[{self.str_ip}] Sending message: {cmd} ({len(serialized_envelope)} ")
+        log.info(f"[{self.str_ip}] Sending message: {cmd} ({len(serialized_envelope)} bytes)")
 
         try:
             self.writer.write(serialized_envelope)

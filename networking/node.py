@@ -224,16 +224,16 @@ class Node:
         if len(self.peers) >= APP_CONFIG.get("node", "max_peers"):
             return
 
-        log.info(f"[{peer_str_ip}] Attempting TCP connection...")
+        log.debug(f"[{peer_str_ip}] Attempting TCP connection...")
         reader = writer = None
         try:
             reader, writer = await asyncio.wait_for(asyncio.open_connection(addr[0], addr[1]), timeout=CONNECTION_TIMEOUT)
-            log.info(f"[{peer_str_ip}] TCP connection established. Starting handshake...")
+            log.debug(f"[{peer_str_ip}] TCP connection established. Starting handshake...")
         except ConnectionRefusedError:
             log.info(f"[{peer_str_ip}] Connection refused.")
             return
         except Exception as e:
-            log.exception(f"[{peer_str_ip}] Unexpected error attempting TCP connection: {e}")
+            log.info(f"[{peer_str_ip}] Unexpected error attempting TCP connection: {e}")
             return
 
         peer = Peer(self, reader, writer, name, session_id=self.next_peer_id, direction="outbound")
@@ -252,12 +252,11 @@ class Node:
                 self._updated_peers = 0
                 
                 if initial:
-                    log.info(f"[{peer_str_ip}] Mempool message sent")
                     self.add_task(asyncio.create_task(peer.send_message(MempoolMessage())))
             else:
-                log.warning(f"[{peer_str_ip}] Handshake failed.")
+                log.info(f"[{peer_str_ip}] Handshake failed.")
         except Exception as e:
-            log.exception(f"[{peer_str_ip}] Error during handshake with peer {peer.str_ip}: {e}")
+            log.info(f"[{peer_str_ip}] Error during handshake with peer {peer.str_ip}: {e}")
             await peer.close()
 
     async def _connect_initial_peers(self):
@@ -304,7 +303,7 @@ class Node:
             except asyncio.CancelledError:
                 pass
             except Exception as e:
-                log.error(f"Task failed: {e}")
+                log.exception(f"Task failed: {e}")
             finally:
                 self._tasks.discard(task)
 
