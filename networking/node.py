@@ -160,7 +160,6 @@ class Node:
 
             except Exception as e:
                 log.exception(f"Error in message processor loop: {e}")
-                await asyncio.sleep(1)
 
         log.info("Message processor loop finished.")
 
