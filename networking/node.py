@@ -217,8 +217,9 @@ class Node:
 
     async def _connect_to_peer(self, addr: tuple, name: str = "", initial=False):
         peer_str_ip = f"{addr[0]}:{addr[1]}"
+        log.info(f"[{peer_str_ip}] Attempting to connect...")
         if addr == (self.external_ip, self.port):
-            log.warning("Attempted to self connect.")
+            log.warning(f"[{peer_str_ip}]  Attempted to self connect.")
             return
         
         if len(self.peers) >= APP_CONFIG.get("node", "max_peers"):
@@ -233,7 +234,7 @@ class Node:
             log.info(f"[{peer_str_ip}] Connection refused.")
             return
         except Exception as e:
-            log.info(f"[{peer_str_ip}] Unexpected error attempting TCP connection: {e}")
+            log.exception(f"[{peer_str_ip}] Unexpected error attempting TCP connection: {e}")
             return
 
         peer = Peer(self, reader, writer, name, session_id=self.next_peer_id, direction="outbound")
