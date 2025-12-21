@@ -37,11 +37,11 @@ def process_new_block(block, node):
             # Nothing happens
             pass
         
-    for i in range(len(node.orphan_blocks) - 1, -1, -1):
-        o_block = node.orphan_blocks[i]
-        if get_block_exists(o_block.prev_block):
-            del node.orphan_blocks[i]
-            process_new_block(o_block)
+    adopted = {o_block for o_block in node.orphan_blocks if get_block_exists(o_block.prev_block)}
+    for o_block in adopted:
+        process_new_block(o_block, node)
+    
+    node.orphan_blocks -= adopted
 
         
 def connect_block(block: Block, node):

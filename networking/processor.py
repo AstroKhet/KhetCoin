@@ -248,6 +248,8 @@ class MessageProcessor:
         block_raw = msg.block
         block = Block.parse(BytesIO(block_raw))
 
+        # DEBUGGING ONLY
+        print(block.get_height())
         # 0.1 Block already seen & saved
         if get_block_exists(block.hash()):
             return

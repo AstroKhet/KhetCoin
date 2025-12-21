@@ -213,7 +213,7 @@ class Block:
     def size(self):
         return len(self.serialize())
     
-    def get_miner_tag(self):
+    def get_miner_tag(self) -> str | None:
         # Assume this function is only called for actual blocks i.e. one cb transaction at the start.
         try:
             cb_tx = self._transactions[0]
@@ -222,9 +222,29 @@ class Block:
             return tag
         except:
             return None
+    
+    def get_height(self) -> int | None:
+        "Determines block height from script sig. May not be accurate."
+        try:
+            cb_tx = self._transactions[0]
+            cb_script_sig = cb_tx.inputs[0].script_sig
+            height_bytes = cb_script_sig.commands[0]
+            if len(height_bytes) != 8:
+                raise
+            height = bytes_to_int(height_bytes)
+            return height
+        except:
+            return None
+            
     @property
     def merkle_root(self):
         return self.merkle_tree.root()
+    
+    def __hash__(self):
+        return self.hash()
+    
+    def __eq__(self, other):
+        return self.hash() == other.hash()
 
 # Auxillary functions
 

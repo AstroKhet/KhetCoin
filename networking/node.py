@@ -57,10 +57,9 @@ class Node:
         
         self.is_running = False
         
-        
         # Block consensus 
         self.block_tip_index: BlockIndex = get_block_tip_index()
-        self.orphan_blocks: list[Block] = []
+        self.orphan_blocks: set[Block] = set()
         
         # Transient variables for efficient GUI update
         self._updated_blockchain = 0
