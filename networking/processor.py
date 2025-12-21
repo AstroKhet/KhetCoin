@@ -209,96 +209,63 @@ class MessageProcessor:
         
 
     async def process_getblocks(self, peer: Peer, msg: GetBlocksMessage):
-        print("[getblocks] handling getblocks from peer", peer)
-
         locator_hashes = msg.locator_hashes
         stop_hash = msg.hash_stop
-
-        print(f"[getblocks] locator count = {len(locator_hashes)}")
-        print(f"[getblocks] stop_hash = {stop_hash.hex() if stop_hash else None}")
-
         common_hash = None
         for block_hash in locator_hashes:
             if get_block_exists(block_hash):
                 common_hash = block_hash
-                print(f"[getblocks] found common hash: {block_hash.hex()}")
                 break
 
         if common_hash is None:
-            print("[getblocks] return: no common block found")
             return
-
+        # Collecting block hashes
         curr_height = get_block_height_at_hash(common_hash)
         if curr_height is None:
-            print("[getblocks] return: common hash has no height")
             return
-
-        print(f"[getblocks] starting from height {curr_height}")
-
+        
         block_hashes = []
         while len(block_hashes) < GETBLOCKS_LIMIT:
             curr_hash = get_block_hash_at_height(curr_height)
-
-            if curr_hash is None:
-                print("[getblocks] reached chain tip at height", curr_height)
+            if curr_hash is None:  # You have reached the tip of the blockchain
                 break
 
             if not get_block_exists(curr_hash):
-                print("[getblocks] block missing at height", curr_height)
                 break
 
             block_hashes.append(curr_hash)
-            print(f"[getblocks] added block {curr_hash.hex()} at height {curr_height}")
-
-            if curr_hash == stop_hash:
-                print("[getblocks] stop hash reached")
+            if curr_hash == stop_hash:  # Stop hash reached
                 break
 
             curr_height += 1
 
-        if not block_hashes:
-            print("[getblocks] return: no blocks to announce")
-            return
-
-        block_inv = [(BLOCK_TYPE, block_hash) for block_hash in block_hashes]
-        print(f"[getblocks] sending inv with {len(block_inv)} blocks")
-
-        inv_msg = InvMessage(block_inv)
-        await peer.send_message(inv_msg)
-
+        block_inv = [(BLOCK_TYPE, block_hash) for block_hmethash in block_hashes]
+        if block_inv:
+            inv_msg = InvMessage(block_inv)
+            await peer.send_message(inv_msg)
 
     async def process_block(self, peer: Peer, msg: BlockMessage):
-        print(f"[process_block] received block from peer {peer}")
-
+        peer.last_block_ago = int(time.time())
         block_raw = msg.block
         block = Block.parse(BytesIO(block_raw))
-        block_hash = block.hash()
 
-        print(f"[process_block] block hash={block_hash.hex()} height={block.get_height()}")
-
-        # 0.1 Block already seen
-        if get_block_exists(block_hash):
-            print("[process_block] return: block already exists")
+        # DEBUGGING ONLY
+        print(block.get_height())
+        # 0.1 Block already seen & saved
+        if get_block_exists(block.hash()):
             return
-
+        
         # 0.2 Orphan block
         if not get_block_exists(block.prev_block):
-            print(f"[process_block] orphan block (missing prev={block.prev_block.hex()})")
             self.node.orphan_blocks.add(block)
-            print(f"[process_block] orphan pool size={len(self.node.orphan_blocks)}")
             return
-
-        # 1. Process valid block
-        print("[process_block] processing new block")
+        
+        # 1. Now we know that the block is valid and extends off the blockchain DAG somewhere
         process_new_block(block, self.node)
-
-        # 2. Update peer height
-        index = get_block_index(block_hash)
-        if index:
+        
+        # 2. If the block is successfully verified & saved, this tells us that the peer is at least at that block's height
+        if index := get_block_index(block.hash()):
             peer.height = index.height
-            print(f"[process_block] updated peer height to {peer.height}")
-        else:
-            print("[process_block] warning: block index not found after processing")
 
 
 

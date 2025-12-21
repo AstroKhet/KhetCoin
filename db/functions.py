@@ -18,53 +18,30 @@ BLOCKCHAIN_DIR = APP_CONFIG.get("path", "blockchain")
 
 
 def process_new_block(block, node):
-    block_hash = block.hash()
-    print(f"[process_new_block] start block={block_hash.hex()}")
-
     if not block.verify():
-        print("[process_new_block] return: block verification failed")
         return
-
+    
     save_block_data(block)
-    print("[process_new_block] block saved")
+    
+    block_index = get_block_index(block.hash())
 
-    block_index = get_block_index(block_hash)
-    if block_index is None:
-        print("[process_new_block] return: no block index after save")
-        return
-
-    # 1.1 Extends active chain
+    # 1.1 Block extends active chain
     if block.prev_block == node.block_tip_index.hash:
-        print("[process_new_block] extends active chain")
         connect_block(block, node)
-
-    # 2. Forked chain
+        
+    # 2. Block extends forked chain
     else:
-        print("[process_new_block] block on fork")
-        print(
-            f"[process_new_block] block chainwork={block_index.chainwork}, "
-            f"tip chainwork={node.block_tip_index.chainwork}"
-        )
-
         if block_index.chainwork > node.block_tip_index.chainwork:
-            print("[process_new_block] reorg triggered")
             reorg_blockchain(node.block_tip_index, block_index, node)
         else:
-            print("[process_new_block] fork ignored (lower chainwork)")
-
-    # 3. Orphan adoption
-    adopted = {o for o in node.orphan_blocks if get_block_exists(o.prev_block)}
-    if adopted:
-        print(f"[process_new_block] adopting {len(adopted)} orphan(s)")
-
+            # Nothing happens
+            pass
+        
+    adopted = {o_block for o_block in node.orphan_blocks if get_block_exists(o_block.prev_block)}
     for o_block in adopted:
-        print(f"[process_new_block] adopting orphan {o_block.hash().hex()}")
         process_new_block(o_block, node)
-
-    if adopted:
-        node.orphan_blocks -= adopted
-        print(f"[process_new_block] orphan pool size now {len(node.orphan_blocks)}")
-
+    
+    node.orphan_blocks -= adopted
 
         
 def connect_block(block: Block, node):
