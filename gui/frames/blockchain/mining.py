@@ -271,7 +271,7 @@ class MiningFrame(tk.Frame):
         # 3. If miner is active, update GUI for mining duration
         else:
             t_mining = round(time.monotonic() - self._mining_start_t)
-            self.label_mining_status.config(text=f"Mining... ({t_mining}s)")
+            self.label_mining_status.config(text=f"Mining... ({format_age(t_mining)})")
 
     def _start_miner(self):
         """Creates coinbase transactions and activates miner"""

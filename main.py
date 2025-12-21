@@ -1,22 +1,12 @@
 
-
 def main():
-    from setup.initializer import init_folders, init_font
-    from setup.functions import RUNTIME_SETUP
+    
+    from setup.functions import RUNTIME_SETUP, INITIAL_SETUP
     from utils.config import APP_CONFIG
 
     if not APP_CONFIG.get("app", "initial_setup"):
         try:
-            from setup.setup import SetupApp
-            from setup.initializer import init_db
-    
-            init_folders()
-            setup_app = SetupApp()
-            setup_app.main()
-            init_db()
-            init_font()
-
-            
+            INITIAL_SETUP()
             APP_CONFIG.set("app", "initial_setup", True)
         except Exception as e:
             print(f"Initial setup failed: {e}")
@@ -24,12 +14,10 @@ def main():
 
     RUNTIME_SETUP()
     from gui.app import KhetcoinApp
-
     node_kwargs = {
         "name": APP_CONFIG.get("app", "name"),
         "port": APP_CONFIG.get("node", "port")
     }
-
     app = KhetcoinApp(**node_kwargs)
     app.main()
 

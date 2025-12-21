@@ -175,7 +175,7 @@ class Peer:
                 self._last_tx = self._last_recv_timestamp
 
             try:
-                await self.node.processor_queue.put((self, envelope))
+                await self.node.msg_processor_queue.put((self, envelope))
             except Exception as e:
                 log.error(
                     f"[{self.str_ip}] Error putting message onto queue: {e}. Stopping listener."
@@ -231,18 +231,21 @@ class Peer:
 
     @property
     def last_tx(self) -> int | None:
+        """Returns how long ago this """
         if self._last_tx:
             return int(time.time()) - self._last_tx
         return None
 
     @property
     def last_send(self) -> int | None:  # Last time YOU sent to PEER
+        """Returns how long ago you sent a message from this peer"""
         if self._last_send_timestamp:
             return int(time.time()) - self._last_send_timestamp
         return None
 
     @property
     def last_recv(self) -> int | None:  # Last time PEER sent to YOU
+        """Returns how long ago you received a message from this peer"""
         if self._last_recv_timestamp:
             return int(time.time()) - self._last_recv_timestamp
         return None

@@ -1,7 +1,6 @@
 """
 Setup file to create LMDB database and save genesis block
 """
-
 from math import floor
 from pathlib import Path
 import sqlite3
@@ -10,8 +9,7 @@ import tkinter as tk
 from tkinter import font
 
 from crypto.hashing import HASH256
-from db.constants import ADDR_DB, HEIGHT_DB, INDEX_DB, LMDB_ENV, BLOCK_MAGIC, BLOCKS_DB, TX_DB, UTXO_DB
-from db.index import BlockIndex
+
 from ktc_constants import GENESIS_HASH, GENESIS_BLOCK_BYTES, HIGHEST_TARGET, INITIAL_BLOCK_REWARD
 from utils.config import APP_CONFIG
 from utils.helper import int_to_bytes
@@ -19,8 +17,6 @@ from utils.helper import int_to_bytes
 ADDRESSES_SQL = APP_CONFIG.get("path", "addresses")
 PEERS_SQL = APP_CONFIG.get("path", "peers")
 BLOCKCHAIN_DIR = APP_CONFIG.get("path", "blockchain")
-
-
 
 
 def init_folders():
@@ -74,6 +70,7 @@ def init_db():
         con.commit()
         
     # 2. LMDB files (.mdb)
+    from db.constants import ADDR_DB, HEIGHT_DB, INDEX_DB, LMDB_ENV, BLOCK_MAGIC, BLOCKS_DB, TX_DB, UTXO_DB
     with LMDB_ENV.begin(write=True) as txn:
         LMDB_ENV.open_db(b"blocks",      txn=txn, create=True)
         LMDB_ENV.open_db(b"index",       txn=txn, create=True)

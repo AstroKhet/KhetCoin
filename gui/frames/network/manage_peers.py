@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from datetime import timedelta
+from db.height import get_blockchain_height
 from gui.bindings import bind_hierarchical, mousewheel_cb
 
 from gui.common.scrollable import create_scrollable_frame, create_scrollable_treeview
@@ -191,9 +192,8 @@ class ManagePeersFrame(tk.Frame):
             "Services": f"{peer.services} # into text",
             "Version": peer.version,
             "Transaction Relay": "Yes" if peer.relay else "No",
-            "Starting Block": peer.height,
-            "Synced Headers": "# snyced headers",
-            "Synced Blocks": "# Synced blocks",
+            "Current Block": peer.height,
+            "Synced Blocks": str(min(peer.height, get_blockchain_height())),
             "Connection Time": f"{timedelta(seconds=peer.connection_time)}",
             "Last Block": f"{peer.last_block}s" if peer.last_block else "Never",
             "Last Transaction": f"{peer.last_tx}s" if peer.last_tx else "Never",

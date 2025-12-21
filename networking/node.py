@@ -41,7 +41,7 @@ class Node:
         self.loop = loop
         self.mempool = Mempool()
         self.miner = Miner()
-
+        
         # Clients (peers)
         self.next_peer_id: int = 0
         self.peer_id_lookup: dict = dict()
@@ -49,19 +49,20 @@ class Node:
         self.bytes_sent: int = 0
 
         # Async variables
-        self.processor = MessageProcessor(self)
-        self.processor_queue: asyncio.Queue[Tuple[Peer, MessageEnvelope]] = asyncio.Queue()  # For db write serialization
+        self.msg_processor = MessageProcessor(self)
+        self.msg_processor_queue: asyncio.Queue[Tuple[Peer, MessageEnvelope]] = asyncio.Queue()  # For db write serialization
 
         self._shutdown_requested = asyncio.Event()
         self._tasks: Set[asyncio.Task] = set()
         
         self.is_running = False
-        # Transient variables for efficient GUI update
+        
         
         # Block consensus 
         self.block_tip_index: BlockIndex = get_block_tip_index()
         self.orphan_blocks: list[Block] = []
         
+        # Transient variables for efficient GUI update
         self._updated_blockchain = 0
         self._updated_peers = 0
         log.info(f"Node '{self.name}' initialized on {self.external_ip}:{self.port}")
@@ -147,7 +148,7 @@ class Node:
         log.info("Message processor loop started.")
         while not self._shutdown_requested.is_set():
             try:
-                peer, message_envelope = await self.processor_queue.get()
+                peer, message_envelope = await self.msg_processor_queue.get()
                 # Concurrent message processing
                 # processor_task = asyncio.create_task(
                 #     self.processor.process_message(peer, message_envelope)
@@ -155,8 +156,8 @@ class Node:
                 # self.add_task(processor_task)
 
                 # Single message processing
-                await self.processor.process_message(peer, message_envelope)
-                self.processor_queue.task_done()
+                await self.msg_processor.process_message(peer, message_envelope)
+                self.msg_processor_queue.task_done()
 
             except Exception as e:
                 log.exception(f"Error in message processor loop: {e}")
@@ -207,10 +208,10 @@ class Node:
                 self._updated_peers = 0
                 await peer.send_message(GetAddrMessage())
             else:
-                log.warning(f"[{peer.str_ip}]  Handshake failed or rejected .")
+                log.warning(f"[{peer.str_ip}] Handshake failed or rejected .")
         
         except Exception as e:
-            log.exception(f"[{peer.str_ip}] Error during handshake: {e}")
+            log.warning(f"[{peer.str_ip}] Error during handshake: {e}")
             if not peer.writer.is_closing():
                 await peer.close()
 
@@ -275,8 +276,6 @@ class Node:
 
     async def _rotate_peers(self):
         timeout = APP_CONFIG.get("node", "peer_inactive_timeout")
-
-        
         while not self._shutdown_requested.is_set():
             now = time.time()
             
