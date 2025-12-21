@@ -284,9 +284,7 @@ class Node:
                 if peer.last_recv_ago > timeout:
                     await peer.close()
                     log.info(f"[{peer.str_ip}] Removed inactive peer.")
-                    
-                print("Height diff", peer.height - self.block_tip_index.height >= 5)
-                print("Last block", peer.last_block_ago >= 30)
+
                 if (peer.height - self.block_tip_index.height >= 5) and (peer.last_block_ago >= 30):
                      peer.send_message(
                          GetBlocksMessage(
