@@ -12,7 +12,7 @@ class BlockMessage:
             self.block = self.payload = block
 
     def __str__(self):
-        return f"[block]\n{self.block}"
+        return f"[block]\n{self.block.hex()}"
 
     @classmethod
     def parse(cls, stream: BinaryIO):

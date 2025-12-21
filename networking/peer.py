@@ -82,7 +82,16 @@ class Peer:
     async def read_message(self) -> MessageEnvelope | None:
         try:
             envelope = await MessageEnvelope.parse_async(self.reader)
-
+            
+            self.bytes_recv += envelope.payload_size
+            self.node.bytes_recv += envelope.payload_size
+            self.last_recv_timestamp = int(time.time())
+                
+            if isinstance(envelope.message, BlockMessage):
+                self.last_block_timestamp = self.last_recv_timestamp
+            elif isinstance(envelope.message, TxMessage):
+                self.last_tx_timestamp = self.last_recv_timestamp
+                
             log.info(f"[{self.str_ip}] Received message: \n{envelope}")
             return envelope
         except ValueError:
@@ -118,10 +127,6 @@ class Peer:
             self.bytes_sent += len(serialized_envelope)
             self.node.bytes_sent += len(serialized_envelope)
             self.last_send_timestamp = int(time.time())
-            if isinstance(envelope.message, BlockMessage):
-                self.last_block_timestamp = self.last_send_timestamp
-            elif isinstance(envelope.message, TxMessage):
-                self.last_tx_timestamp = self.last_send_timestamp
 
             log.info(f"[{self.str_ip}] Sent message: {cmd} ({len(serialized_envelope)} bytes)\n{envelope}")
         except Exception as e:
@@ -161,25 +166,11 @@ class Peer:
             envelope = await self.read_message()
             if envelope is None:
                 continue
-                # log.warning(f"[{self.str_ip}] Read None message. Stopping listener.")
-                # break
-
-            self.bytes_recv += envelope.payload_size
-            self.node.bytes_recv += envelope.payload_size
-            self.last_recv_timestamp = int(time.time())
-            await set_last_seen(self.ip, self.port, self.last_recv_timestamp)
-
-            if isinstance(envelope.message, BlockMessage):
-                self.last_block_timestamp = self.last_recv_timestamp
-            elif isinstance(envelope.message, TxMessage):
-                self.last_tx_timestamp = self.last_recv_timestamp
 
             try:
                 await self.node.msg_processor_queue.put((self, envelope))
             except Exception as e:
-                log.error(
-                    f"[{self.str_ip}] Error putting message onto queue: {e}. Stopping listener."
-                )
+                log.error(f"[{self.str_ip}] Error putting message onto queue: {e}. Stopping listener.")
                 break
 
         log.info(f"[{self.str_ip}] Listener task stopped.")
@@ -187,6 +178,9 @@ class Peer:
 
     async def close(self):
         log.info(f"[{self.str_ip}] Closing connection...")
+        if self.last_recv_timestamp != 0:
+            await set_last_seen(self.ip, self.port, self.last_recv_timestamp)
+        
         if self.listen_task and not self.listen_task.done():
             log.debug(f"[{self.str_ip}] Cancelling listen task.")
             self.listen_task.cancel()
