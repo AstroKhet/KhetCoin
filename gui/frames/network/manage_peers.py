@@ -90,8 +90,7 @@ class ManagePeersFrame(tk.Frame):
 
         detail_fields = [
             "Name", "Direction", "Peer ID", "Address", "User Agent",
-            "Services", "Version", "Transaction Relay", "Starting Block",
-            "Synced Headers", "Synced Blocks",
+            "Services", "Version", "Transaction Relay", "Current Block", "Synced Blocks",
             "Connection Time",
             "Last Block", "Last Transaction", "Last Send", "Last Receive",
             "Sent", "Received",
