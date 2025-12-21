@@ -86,7 +86,8 @@ class Peer:
             self.bytes_recv += envelope.payload_size
             self.node.bytes_recv += envelope.payload_size
             self.last_recv_timestamp = int(time.time())
-                
+            
+            print(type(envelope.message))
             if isinstance(envelope.message, BlockMessage):
                 self.last_block_timestamp = self.last_recv_timestamp
             elif isinstance(envelope.message, TxMessage):
@@ -94,8 +95,6 @@ class Peer:
                 
             log.info(f"[{self.str_ip}] Received message: \n{envelope}")
             return envelope
-        except ValueError:
-            return None
         except (asyncio.IncompleteReadError, ConnectionResetError, EOFError) as e:
             log.warning(f"[{self.str_ip}] Connection closed: {type(e).__name__}")
             await self.close()

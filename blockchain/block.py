@@ -6,7 +6,6 @@ from typing import List, BinaryIO
 from io import BytesIO
 
 from db.block import get_block_height_at_hash
-from db.index import BlockIndex, get_block_index
 from utils.helper import bits_to_target, bytes_to_int, read_varint, encode_varint
 from blockchain.header import Header
 from blockchain.transaction import Transaction

@@ -239,7 +239,7 @@ class MessageProcessor:
 
             curr_height += 1
 
-        block_inv = [(BLOCK_TYPE, block_hash) for block_hash in block_hashes]
+        block_inv = [(BLOCK_TYPE, block_hash) for block_hmethash in block_hashes]
         if block_inv:
             inv_msg = InvMessage(block_inv)
             await peer.send_message(inv_msg)
@@ -256,7 +256,7 @@ class MessageProcessor:
         
         # 0.2 Orphan block
         if not get_block_exists(block.prev_block):
-            self.node.orphan_blocks.append(block)
+            self.node.orphan_blocks.add(block)
             return
         
         # 1. Now we know that the block is valid and extends off the blockchain DAG somewhere
