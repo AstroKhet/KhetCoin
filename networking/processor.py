@@ -239,7 +239,10 @@ class MessageProcessor:
             await peer.send_message(inv_msg)
 
     async def process_block(self, peer: Peer, msg: BlockMessage):
-        peer.last_block_ago = int(time.time())
+        # Dont ask for more food until you've eaten them all !
+        peer.last_block_age = int(time.time())
+        
+        # process new block
         block_raw = msg.block
         block = Block.parse(BytesIO(block_raw))
 
