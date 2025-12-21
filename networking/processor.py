@@ -53,6 +53,7 @@ class MessageProcessor:
         peer.version = msg.version
         peer.services = msg.services
         peer.user_agent = msg.user_agent
+        peer.time_offset = msg.timestamp - int(time.time()) 
         peer.height = msg.start_height
         peer.relay = msg.relay
 

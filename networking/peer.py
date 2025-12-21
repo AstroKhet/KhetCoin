@@ -52,10 +52,10 @@ class Peer:
         self.time_created: int = int(time.time())
 
         # Tracking
-        self._last_block: int | None = None
-        self._last_tx: int | None = None
-        self._last_send_timestamp: int | None = None
-        self._last_recv_timestamp: int | None = None
+        self.last_block_timestamp: int | None = None
+        self.last_tx_timestamp: int | None = None
+        self.last_send_timestamp: int | None = None
+        self.last_recv_timestamp: int | None = None
 
         self.bytes_recv: int = 0
         self.bytes_sent: int = 0
@@ -117,11 +117,11 @@ class Peer:
             # Tracking
             self.bytes_sent += len(serialized_envelope)
             self.node.bytes_sent += len(serialized_envelope)
-            self._last_send_timestamp = int(time.time())
+            self.last_send_timestamp = int(time.time())
             if isinstance(envelope.message, BlockMessage):
-                self._last_block = self._last_send_timestamp
+                self.last_block_timestamp = self.last_send_timestamp
             elif isinstance(envelope.message, TxMessage):
-                self._last_tx = self._last_send_timestamp
+                self.last_tx_timestamp = self.last_send_timestamp
 
             log.info(f"[{self.str_ip}] Sent message: {cmd} ({len(serialized_envelope)} bytes)\n{envelope}")
         except Exception as e:
@@ -166,13 +166,13 @@ class Peer:
 
             self.bytes_recv += envelope.payload_size
             self.node.bytes_recv += envelope.payload_size
-            self._last_recv_timestamp = int(time.time())
-            await set_last_seen(self.ip, self.port, self._last_recv_timestamp)
+            self.last_recv_timestamp = int(time.time())
+            await set_last_seen(self.ip, self.port, self.last_recv_timestamp)
 
             if isinstance(envelope.message, BlockMessage):
-                self._last_block = self._last_recv_timestamp
+                self.last_block_timestamp = self.last_recv_timestamp
             elif isinstance(envelope.message, TxMessage):
-                self._last_tx = self._last_recv_timestamp
+                self.last_tx_timestamp = self.last_recv_timestamp
 
             try:
                 await self.node.msg_processor_queue.put((self, envelope))
@@ -224,30 +224,28 @@ class Peer:
         return int(time.time()) - self.time_created
 
     @property
-    def last_block(self) -> int | None:
-        if self._last_block:
-            return int(time.time()) - self._last_block
-        return None
+    def last_block_ago(self) -> int | None:
+        "Returns how long ago this node sent a block"
+        return int(time.time()) - self.last_block_timestamp
 
     @property
-    def last_tx(self) -> int | None:
-        """Returns how long ago this """
-        if self._last_tx:
-            return int(time.time()) - self._last_tx
-        return None
+    def last_tx_ago(self) -> int | None:
+        """Returns how long ago this node sent a tx"""
+        return int(time.time()) - self.last_tx_timestamp
+
 
     @property
-    def last_send(self) -> int | None:  # Last time YOU sent to PEER
+    def last_send_ago(self) -> int | None:  # Last time YOU sent to PEER
         """Returns how long ago you sent a message from this peer"""
-        if self._last_send_timestamp:
-            return int(time.time()) - self._last_send_timestamp
+        if self.last_send_timestamp:
+            return int(time.time()) - self.last_send_timestamp
         return None
 
     @property
-    def last_recv(self) -> int | None:  # Last time PEER sent to YOU
+    def last_recv_ago(self) -> int | None:  # Last time PEER sent to YOU
         """Returns how long ago you received a message from this peer"""
-        if self._last_recv_timestamp:
-            return int(time.time()) - self._last_recv_timestamp
+        if self.last_recv_timestamp:
+            return int(time.time()) - self.last_recv_timestamp
         return None
 
     def __hash__(self):

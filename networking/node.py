@@ -280,12 +280,12 @@ class Node:
             
             # 1. Clear inactive peers
             for peer in list(self.peers):
-                if peer.last_recv > timeout:
+                if peer.last_recv_ago > timeout:
                     await peer.close()
                     log.info(f"[{peer.str_ip}] Removed inactive peer.")
                     
                 
-                if (peer.height - self.block_tip_index.height >= 5) and (now - peer.last_block >= 30):
+                if (peer.height - self.block_tip_index.height >= 5) and (peer.last_block_ago >= 30):
                      peer.send_message(
                          GetBlocksMessage(
                              PROTOCOL_VERSION,
