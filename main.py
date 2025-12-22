@@ -4,7 +4,7 @@ from setup.functions import configure_logging, run_initial_setup
 from utils.config import APP_CONFIG
 
 
-def launch_app(logger: logging.Logger) -> None:
+def launch_app() -> None:
     """
     Launch the GUI application.
     """
@@ -31,7 +31,7 @@ def main():
         logger.error("Aborting due to setup failure")
         return
 
-    launch_app(logger)
+    launch_app()
 
 
 if __name__ == "__main__":

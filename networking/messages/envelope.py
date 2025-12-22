@@ -11,16 +11,10 @@ log = logging.getLogger(__name__)
 
 class MessageEnvelope:
     def __init__(self, message):
-        self.command = message.command.strip(b"\x00")
+        self.message = message
+        self.command = message.command
         self.payload = message.payload
-
-        message_class = COMMAND_MAP.get(self.command)
-        if not message_class:
-            log.warning(f"Received message with unknown command!: {self.command.decode('ascii')}")
-            raise ValueError
-
-        self.message = message_class.parse(self.payload_stream)
-
+        
     def __str__(self):
         result = f"{self.message}\n"
         result += f"Length: {len(self.payload)}\n"
@@ -40,14 +34,19 @@ class MessageEnvelope:
 
         if HASH256(payload)[:4] != checksum:
             raise RuntimeError("Checksum mismatch")
-
-        return cls(command, payload)
+        
+        message_class = COMMAND_MAP.get(command)
+        if not message_class:
+            log.warning(f"Received message with unknown command!: {command.decode('ascii')}")
+            raise ValueError
+        
+        message = message_class.parse(BytesIO(payload))
+        return cls(message)
 
     @classmethod
     async def parse_async(cls, reader: asyncio.StreamReader) -> "MessageEnvelope":
         magic = await reader.readexactly(4)
         if not magic:
-            #TODO: Handle ConnectionResetError
             raise EOFError("Peer disconnected")
         if magic != NETWORK_MAGIC:
             raise RuntimeError("Invalid network magic")
@@ -61,7 +60,13 @@ class MessageEnvelope:
         if HASH256(payload)[:4] != checksum:
             raise RuntimeError("Checksum mismatch")
 
-        return cls(command, payload)
+        message_class = COMMAND_MAP.get(command)
+        if not message_class:
+            log.warning(f"Received message with unknown command!: {command.decode('ascii')}")
+            raise ValueError
+        
+        message = message_class.parse(BytesIO(payload))
+        return cls(message)
     
     def serialize(self) -> bytes:
         result: bytes = NETWORK_MAGIC
