@@ -6,15 +6,18 @@ from tkinter import ttk, messagebox
 from crypto.key import private_key_to_wif, save_private_key
 from crypto.keygen import KeyGenerator
 from gui.helper import reset_widget
+from gui.vcmd import register_VCMD_filename, register_VCMD_wif_prefix
 from utils.config import APP_CONFIG
     
 class SetupApp():
     def __init__(self):
-        
         self.root = tk.Tk()
         self.root.title("KhetCoin Setup")
         self.root.geometry("600x400")
         self.root.protocol("WM_DELETE_WINDOW", self._close)
+        
+        self.vcmd_filename = register_VCMD_filename(self.root)
+        self.vcmd_wif_prefix = register_VCMD_wif_prefix(self.root)
         
         self.view_container = tk.Frame(self.root)
         self.view_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -49,7 +52,7 @@ class SetupApp():
 
         tk.Label(frame, text="To get started, please enter your name:",).pack(pady=(0, 10))
 
-        entry = ttk.Entry(frame, textvariable=name_var, width=25, justify="center")
+        entry = ttk.Entry(frame, textvariable=name_var, width=25, justify="center", validate="key", validatecommand=self.vcmd_filename)
         entry.pack(pady=5)
         entry.focus_set()
 
@@ -57,22 +60,6 @@ class SetupApp():
             name = name_var.get().strip()
             if not name:
                 messagebox.showwarning("Invalid name", "Please enter your name.")
-                return
-
-            try:
-                name.encode("utf-8")
-            except UnicodeEncodeError:
-                messagebox.showwarning(
-                    "Invalid name",
-                    "Name must be valid UTF-8."
-                )
-                return
-            
-            if len(name) > 25:
-                messagebox.showwarning(
-                    "Invalid name",
-                    "Name cannot exceed 25 characters"
-                )
                 return
 
             if messagebox.askyesno(
@@ -123,10 +110,9 @@ class SetupApp():
 
         tk.Label(prefix_frame, text="Prefix (optional):").pack(side="left")
 
-        BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+        
         self.prefix_var = tk.StringVar()
-        vcmd = (frame.register(lambda P: (len(P) <= 4) and all(c in BASE58_ALPHABET for c in P)), "%P")
-        self.entry_prefix = ttk.Entry(prefix_frame, width=5, textvariable=self.prefix_var, validate="key", validatecommand=vcmd)
+        self.entry_prefix = ttk.Entry(prefix_frame, width=5, textvariable=self.prefix_var, validate="key", validatecommand=self.vcmd_wif_prefix)
         self.entry_prefix.pack(side="left", padx=5)
 
         def show_prefix_info():

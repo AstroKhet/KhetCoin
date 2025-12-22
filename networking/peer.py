@@ -197,7 +197,7 @@ class Peer:
             self.node.remove_peer(self) 
         
     def ping(self):
-        self.node.spawn(asyncio.create_task(self._ping_task()))
+        self.node.spawn(self._ping_task())
 
     async def _ping_task(self) -> None:  # Creates a ping task
         # Reset pong_future
