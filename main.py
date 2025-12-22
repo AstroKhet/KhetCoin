@@ -1,25 +1,37 @@
+import logging
 
-def main():
-    
-    from setup.functions import RUNTIME_SETUP, INITIAL_SETUP
-    from utils.config import APP_CONFIG
+from setup.functions import configure_logging, run_initial_setup
+from utils.config import APP_CONFIG
 
-    if not APP_CONFIG.get("app", "initial_setup"):
-        try:
-            INITIAL_SETUP()
-            APP_CONFIG.set("app", "initial_setup", True)
-        except Exception as e:
-            print(f"Initial setup failed: {e}")
-            return
 
-    RUNTIME_SETUP()
+def launch_app(logger: logging.Logger) -> None:
+    """
+    Launch the GUI application.
+    """
     from gui.app import KhetcoinApp
+
     node_kwargs = {
         "name": APP_CONFIG.get("app", "name"),
         "port": APP_CONFIG.get("node", "port")
     }
+
     app = KhetcoinApp(**node_kwargs)
     app.main()
+
+
+def main():
+    """
+    Main entry point.
+    """
+    logger = configure_logging()
+
+    try:
+        run_initial_setup(logger)
+    except Exception:
+        logger.error("Aborting due to setup failure")
+        return
+
+    launch_app(logger)
 
 
 if __name__ == "__main__":

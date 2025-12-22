@@ -2,6 +2,7 @@
 import re
 
 from ktc_constants import KTC
+from math import isclose
 
 def register_VCMD_INT(parent):
     VCMD_INT = (parent.register(lambda P: P.isdigit() or P==""), "%P")
@@ -27,4 +28,5 @@ def _validate_KTC(new):
     except ValueError:
         return False
     
-    return (val * KTC) % 1 == 0
+    val_khets = val * KTC
+    return isclose(val_khets, round(val_khets), rel_tol=0.0, abs_tol=1e-3)  # To deal with floating point precision error

@@ -13,6 +13,9 @@ from utils.fmt import format_age, format_epoch
 
 PEERS_SQL = APP_CONFIG.get("path", "peers")
 
+_frame_id = 43
+
+
 class SavedPeersFrame(tk.Frame):
     def __init__(self, parent, controller, node):
         super().__init__(parent)

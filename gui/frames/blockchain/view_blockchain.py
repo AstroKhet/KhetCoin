@@ -22,6 +22,9 @@ from utils.fmt import format_age, format_bytes, format_epoch, format_number, for
 # TODO: Implement sort by ascending/descending for each column in block view
 # Blocks are sorted by height in descending order
 
+
+_frame_id = 21
+
 class ViewBlockchainFrame(tk.Frame):
     def __init__(self, parent, controller, node: Node, **kwargs):
         """
@@ -494,7 +497,7 @@ class ViewBlockchainFrame(tk.Frame):
             "Version": tx.version,
             "Inputs": len(tx.inputs),
             "Outputs": len(tx.outputs),
-            "Input Value": "N/A"if tx.is_coinbase()else f"{sum(tx_in.value() or 0 for tx_in in tx.inputs)/KTC} KTC",
+            "Input Value": "N/A"if tx.is_coinbase()else f"{sum(tx_in.fetch_value() or 0 for tx_in in tx.inputs)/KTC} KTC",
             "Output Value": f"{sum(tx_out.value for tx_out in tx.outputs)/KTC} KTC",
             "Size": format_bytes(len(tx.serialize())),
             "Fee": f"{fee} khets",
@@ -557,12 +560,12 @@ class ViewBlockchainFrame(tk.Frame):
         # Inputs
         for i, tx_in in enumerate(tx.inputs, start=1):
             script_sig = tx_in.script_sig
-            script_pk = tx_in.script_pubkey()
+            script_pk = tx_in.fetch_script_pubkey()
             if tx.is_coinbase():
                 addr = "Coinbase"
             else:
                 addr = script_sig.get_script_sig_sender() or "N/A"
-            value = tx_in.value() or 0
+            value = tx_in.fetch_value() or 0
 
             frame_input = tk.Frame(frame_tx_io)
             frame_input.grid(row=i, column=0, sticky="we", padx=2, pady=2)
@@ -650,7 +653,7 @@ class ViewBlockchainFrame(tk.Frame):
         if not self._is_active:
             return
         
-        if self.node.check_updated_blockchain(1):
+        if self.node.check_updated_blockchain(_frame_id):
             self.no_block_rows = self.node.block_tip_index.height + 1
             self.no_block_pages = ceil(self.no_block_rows / self.rows_per_page)
             self.spinbox_block.config(to=self.no_block_pages)

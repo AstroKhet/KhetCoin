@@ -11,6 +11,8 @@ from networking.node import Node
 from utils.fmt import format_age, format_bytes, truncate_bytes
 
 
+_frame_id = 22
+
 class MempoolFrame(tk.Frame):
     def __init__(self, parent, controller, node: Node):
         super().__init__(parent)
@@ -179,12 +181,12 @@ class MempoolFrame(tk.Frame):
             self.tree_orphan_txs.set(iid, "received", format_age(time.time() - tx_time))
 
         # Valid Transaction listening
-        if self.node.mempool.check_update_valids():
+        if self.node.mempool.check_update_valids(_frame_id):
             self._generate_valid_txs_treeview()
             self._generate_metadata()
         
         # Orphan Transaction listening
-        if self.node.mempool.check_update_orphans():
+        if self.node.mempool.check_update_orphans(_frame_id):
             self._generate_orphan_txs_treeview()
             self._generate_metadata()
 

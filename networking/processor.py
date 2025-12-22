@@ -63,8 +63,7 @@ class MessageProcessor:
         # await peer.close() # Optionally disconnect
 
         # 3. Send verack
-        verack_envelope = MessageEnvelope(b"verack")
-        await peer.send_message(verack_envelope)
+        await peer.send_message(VerackMessage())
 
 
     async def process_verack(self, peer: Peer, msg: VerackMessage):
@@ -73,12 +72,7 @@ class MessageProcessor:
 
     async def process_ping(self, peer: Peer, msg: PingMessage):
         # Create pong message with the same nonce
-        pong_message = PongMessage(nonce=msg.nonce)
-        pong_envelope = MessageEnvelope(
-            command=pong_message.command,
-            payload=pong_message.payload,
-        )
-        await peer.send_message(pong_envelope)
+        await peer.send_message(PongMessage(nonce=msg.nonce))
 
     async def process_pong(self, peer: Peer, msg: PongMessage):
         if not peer.pong_future.done():
@@ -100,9 +94,7 @@ class MessageProcessor:
                     continue
             else: # 0 or some other invalid type - ignore
                 continue
-            missing_inventory.append(
-                (inv_type, inv_hash)
-            )
+            missing_inventory.append((inv_type, inv_hash))
         
         if missing_inventory:
             getdata_msg = GetDataMessage(missing_inventory)
@@ -139,24 +131,12 @@ class MessageProcessor:
 
         # Process incoming addresses
         for addr in msg.addresses:
-            # This trusts that other nodes are not sending bad data
-            # Possible to implement aggregation to determine bad data
-            save_peers_task = asyncio.create_task(save_peer_from_addr(addr))
-            self.node.add_task(save_peers_task)
-
-        
-        if (vacancy := APP_CONFIG.get("node", "max_peers") - len(self.node.peers)) > 0:
-            for i in range(min(vacancy, len(msg.addresses))):
-                timestamp, services, ip, port = msg.addresses[i]
-                self.node.add_task(
-                    asyncio.create_task(
-                        self.node.connect_to_peer((ip, port), "Peer")
-                    )
-                )
-        
+            ip = addr[2]
+            if is_routable(ip):
+                await save_peer_from_addr(addr)
+                
         # Relay addresses to 2 other random peers
         addr_msg = AddrMessage(msg.addresses)
-
         await self.node.broadcast(
             message=addr_msg,
             exclude=peer,
@@ -170,14 +150,12 @@ class MessageProcessor:
         for block_hash in locator_hashes:
             if get_block_exists(block_hash):
                 common_hash = block_hash
+                break
 
-        if common_hash is None: 
+        if common_hash is None:
             return
 
-        curr_height = get_block_height_at_hash(common_hash)
-        if curr_height is None:
-            return
-        
+        curr_height = get_block_height_at_hash(common_hash) + 1
         headers = []
         # Collecting headers
         while len(headers) < GETHEADERS_LIMIT:

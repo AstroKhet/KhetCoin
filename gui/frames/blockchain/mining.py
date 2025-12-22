@@ -28,6 +28,9 @@ from utils.helper import target_to_bits
 log = logging.getLogger(__name__)
 
 
+
+_frame_id = 23
+
 class MiningFrame(tk.Frame):
     def __init__(self, parent, controller, node: Node):
         super().__init__(parent)
@@ -313,6 +316,7 @@ class MiningFrame(tk.Frame):
         return block
         
     def _process_mined_block(self, block: Block):
+        log.info(f"Processing mined block {block.hash().hex()}")
         self._remove_highlights()
         
         # 1. Save block
@@ -371,7 +375,7 @@ class MiningFrame(tk.Frame):
                 self.tree_mempool.set(iid, "received", format_age(time.time() - tx_time))
             
             # 3. Check mempool for any updates
-            if self.node.mempool.check_update_valids(i=2):
+            if self.node.mempool.check_update_valids(_frame_id):
                 self._generate_mempool_treeview()
                 self._generate_metadata()
             

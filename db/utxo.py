@@ -16,7 +16,7 @@ from utils.helper import bytes_to_int, int_to_bytes
 log = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class UTXO:
     owner: bytes
     value: int
@@ -105,12 +105,12 @@ def delete_utxo_from_addr(addr: bytes, tx_hash: bytes, index: int):
         db.delete(addr, outpoint)
     
     
-def get_utxo_set_to_addr(addr: bytes) -> list[UTXO]:
+def get_utxo_set_to_addr(addr: bytes) -> set[UTXO]:
     """
     Retrieves all UTXOs that pay to `addr`
     """
     # TODO: UTXO set caching
-    utxo_set = []
+    utxo_set = set()
     with LMDB_ENV.begin(db=ADDR_DB) as db:
         cur = db.cursor()
         if cur.set_key(addr):   # position at key
@@ -118,7 +118,7 @@ def get_utxo_set_to_addr(addr: bytes) -> list[UTXO]:
                 if tx_out := get_utxo(op):
                     tx_hash = op[:32]
                     idx = bytes_to_int(op[32:36])
-                    utxo_set.append(
+                    utxo_set.add(
                         UTXO(
                             owner=addr,
                             value=tx_out.value,
@@ -149,6 +149,3 @@ def get_utxo_count_to_addr(addr: bytes) -> int:
             return cursor.count()
         else:
             return 0
-    
-
-    

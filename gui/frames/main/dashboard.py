@@ -8,7 +8,7 @@ from gui.helper import add_hover_effect
 from utils.config import APP_CONFIG
 from utils.fmt import format_snake_case
 
-
+_frame_id = 1
 
 class DashboardFrame(tk.Frame):
     def __init__(self, parent, controller, node):

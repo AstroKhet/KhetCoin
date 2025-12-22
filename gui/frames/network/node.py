@@ -9,7 +9,8 @@ from utils.fmt import format_bytes
 # TODO: Add a way to record data sent/recv per session in Node
 # TODO: Add a live graph that updates every 0.5s or so for data transmission rate
 # TODO: Implement button to go to connected peers next to connected count
-from time import time
+
+_frame_id = 41
 
 class NodeFrame(tk.Frame):
     def __init__(self, parent, controller, node: Node):

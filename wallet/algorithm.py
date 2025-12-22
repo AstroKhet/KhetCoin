@@ -8,7 +8,7 @@ from mining.constants import MIN_RELAY_TX_FEE_RATE
 from utils.config import APP_CONFIG
 
 
-def select_utxos(utxo_set: list[UTXO], target, use_min_change = True) -> list[UTXO] | None:
+def select_utxos(utxo_set: set[UTXO], target, use_min_change = True) -> list[UTXO] | None:
     """
     Provides a list of UTXO objects where its total value satisfy any of the following:
     
@@ -38,24 +38,25 @@ def select_utxos(utxo_set: list[UTXO], target, use_min_change = True) -> list[UT
 
     # 1 UTXO filtering
     # 1.1 Sort UTXOs based on value in ascending order
-    utxo_set.sort(key=lambda utxo: utxo.value)
+    list_utxo_set = list(utxo_set)
+    list_utxo_set.sort(key=lambda utxo: utxo.value)
     total_small = 0
     smaller, larger = [], []
     
     # 1.2 Filter UTXOs based on if their value exceeds target
-    for utxo in utxo_set:
+    for utxo in list_utxo_set:
         if utxo.value < target:
             smaller.append(utxo)
             total_small += utxo.value
         elif utxo.value > target:
             larger.append(utxo)
         else: # Exact match
-            return [utxo]
+            return {utxo}
     
     # 1.3 See if any 'larger' UTXO can fully cover target + min_change by itself
     for l_utxo in larger:
         if l_utxo.value >= target + min_change:
-            return [l_utxo]
+            return {l_utxo}
     
     # 1.4 See if all 'smaller' UTXO can fully cover target + min_change. 
     #     This is a preliminary check to see if we need and 'larger' UTXO in our final UTXO selection
@@ -68,7 +69,7 @@ def select_utxos(utxo_set: list[UTXO], target, use_min_change = True) -> list[UT
         total += s_utxo.value
         selected.append(s_utxo)
         if (total == target) or (total >= target + min_change):
-            return selected
+            return set(selected)
     
     # 1.6 In the rare case where total_small + largest utxo != target and < target + min_change
     return select_utxos(utxo_set, target, use_min_change=False)

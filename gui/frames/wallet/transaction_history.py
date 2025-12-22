@@ -13,6 +13,8 @@ from networking.node import Node
 from utils.fmt import truncate_bytes
 
 
+_frame_id = 33
+
 
 class TransactionHistoryFrame(tk.Frame):
     def __init__(self, parent, controller, node: Node):
@@ -116,7 +118,7 @@ class TransactionHistoryFrame(tk.Frame):
         if not self._is_active:
             return
         
-        if self.node.check_updated_blockchain(2):
+        if self.node.check_updated_blockchain(_frame_id):
             self.tx_history = get_tx_history()
             self._generate_tx_history()
             

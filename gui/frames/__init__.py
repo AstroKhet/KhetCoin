@@ -1,6 +1,6 @@
 
 from gui.frames.blockchain.mempool import MempoolFrame
-from gui.frames.blockchain.saved_addresses import SavedAddressesFrame
+from gui.frames.wallet.saved_addresses import SavedAddressesFrame
 from gui.frames.blockchain.view_blockchain import ViewBlockchainFrame
 from gui.frames.blockchain.mining import MiningFrame
 
@@ -22,7 +22,6 @@ FRAMES_CONFIG = {
     "settings": SettingsFrame,
     
     "view_blockchain": ViewBlockchainFrame,
-    "saved_addresses": SavedAddressesFrame,
     "mempool": MempoolFrame, 
     "mining": MiningFrame,
     
@@ -30,8 +29,9 @@ FRAMES_CONFIG = {
     "UTXO": UTXOFrame,
     "transaction_history": TransactionHistoryFrame,
     "pay": PayFrame,
-    "node": NodeFrame,
+    "saved_addresses": SavedAddressesFrame,
     
+    "node": NodeFrame,
     "manage_peers": ManagePeersFrame,
     "saved_peers": SavedPeersFrame,
 }
@@ -44,11 +44,11 @@ MENU_CONFIG = [
     },
     {
         "name": "blockchain",
-        "options": ["view_blockchain", None, "saved_addresses", "mempool", "mining"]
+        "options": ["view_blockchain", None, "mempool", "mining"]
     },
     {
         "name": "wallet",
-        "options": ["your_wallet", "UTXO", "transaction_history", None, "pay"]
+        "options": ["your_wallet", "UTXO", "transaction_history", None, "pay", "saved_addresses"]
     },
     {
         "name": "network", 

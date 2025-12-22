@@ -10,6 +10,8 @@ from gui.vcmd import register_VCMD_INT, register_VMCD_KTC
 from utils.config import APP_CONFIG
 from utils.fmt import format_snake_case
 
+_frame_id = 2
+
 
 class SettingsFrame(tk.Frame):
     def __init__(self, parent, controller, node):

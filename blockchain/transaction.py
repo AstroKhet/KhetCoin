@@ -33,7 +33,8 @@ class TransactionInput:
         prev_hash: bytes,
         prev_index: int,     
         script_sig: Script = Script([]),     
-        sequence: int = 0xffffffff,          
+        sequence: int = 0xffffffff, 
+        prev_output = None     
     ):
         self.prev_tx_hash = prev_hash    
         self.prev_index = prev_index 
@@ -42,8 +43,10 @@ class TransactionInput:
         # Used for RBF & relative tx locktime, but not implemented here
         self.sequence = sequence            
         
-        self._prev_output = None
-
+        # `unsaved_prev_output` is Used for validating transactions whose inputs depend on UTXOs found only in mempool
+        # `self._prev_output` is used for caching
+        self._prev_output = prev_output
+        
     def __str__(self):
         return (
             f"      Prev Tx Hash : {self.prev_tx_hash.hex()}\n"
@@ -89,12 +92,12 @@ class TransactionInput:
                 return None
         return None
 
-    def value(self) -> int | None:
+    def fetch_value(self) -> int | None:
         if tx_out := self.fetch_tx_output():
             return tx_out.value
         return None
 
-    def script_pubkey(self) -> Script | None:
+    def fetch_script_pubkey(self) -> Script | None:
         """Retrieves the locking script of this Input"""
         if tx_out := self.fetch_tx_output():    
             return tx_out.script_pubkey
@@ -238,7 +241,7 @@ class Transaction:
         result += encode_varint(len(self.inputs))
         for i, input in enumerate(self.inputs):
             if i == index:
-                result += input.serialize(input.script_pubkey())
+                result += input.serialize(input.fetch_script_pubkey())
             else:
                 result += input.serialize(Script())  # Empty script_pubkey
 
@@ -279,7 +282,7 @@ class Transaction:
         if custom_script_pubkey:
             script_pubkey = custom_script_pubkey
         else:
-            script_pubkey = unverified_input.script_pubkey()
+            script_pubkey = unverified_input.fetch_script_pubkey()
             
         if script_pubkey is None:  # Cannot retrieve script_pubkey
             log.warning(f"Unable to retrieve scriptPubkey from input {index}")
@@ -329,7 +332,7 @@ class Transaction:
         if not self.is_coinbase():
             output_seen: set[tuple[bytes, int]] = set()
             for i, input in enumerate(self.inputs):
-                if input.value() is None:
+                if input.fetch_value() is None:
                     if allow_orphan:
                         log.info(f"Unable to find referenced UTXO for Input[{i}]; Orphan transaction")
                         continue
@@ -395,7 +398,7 @@ class Transaction:
     def input_value(self) -> int | None:
         val = 0
         for i, inp in enumerate(self.inputs):
-            value = inp.value()
+            value = inp.fetch_value()
             if value is not None:
                 val += value
             else:
@@ -444,8 +447,9 @@ class Transaction:
 
     def copy(self):
         return Transaction(self.version, self.inputs, self.outputs, self.locktime)
+    
     def __hash__(self):
-        return self.hash()
+        return bytes_to_int(self.hash())
 
     def __eq__(self, other):
         return self.hash() == other.hash()

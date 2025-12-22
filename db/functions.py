@@ -72,7 +72,7 @@ def connect_block(block: Block, node):
     # 5. Set as blockchain tip 
     node.set_tip(block_index)
     
-    # 6. Deal with orphans.
+    log.info(f"Block connected: {block.hash().hex()}")
 
 
 def disconnect_block(block: Block, node):
@@ -99,6 +99,8 @@ def disconnect_block(block: Block, node):
     # 5. Set as blockchain tip 
     block_index = generate_block_index(block)
     node.set_tip(block_index)
+    
+    log.info(f"Block disconnected: {block.hash().hex()}")
     
 
 def reorg_blockchain(old_tip_index: BlockIndex, new_tip_index: BlockIndex, node):
@@ -202,7 +204,7 @@ def save_block_data(block) -> bool:
                 db.put(tx_hash, tx_value, db=TX_DB)
                 offset += len(tx)
                             
-        return True
+        log.info(f"Block data saved for {block.hash().hex()}")
     
     except Exception as e:
         log.exception(f"Error attempting to save block: {e}")

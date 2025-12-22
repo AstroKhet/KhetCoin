@@ -107,14 +107,11 @@ class Peer:
 
     async def send_message(self, msg):
         """Sends `msg` to this peer"""
-        
-        if isinstance(msg, MessageEnvelope):
+        if isinstance(msg, CORE_MESSAGES):
+            envelope = MessageEnvelope(msg)
+        else:
             envelope = msg
-        elif isinstance(msg, CORE_MESSAGES):
-            envelope = MessageEnvelope(msg.command, msg.payload)
-        else:  # Should not happen unless you messed with the source code
-            log.exception(f"Attempted to send invalid message type: {type(msg)}")
-            return 
+   
         
         cmd = envelope.command.decode("ascii", errors="replace")
         serialized_envelope = envelope.serialize()
@@ -138,9 +135,6 @@ class Peer:
     async def send_version(self):
         log.debug(f"[{self.str_ip}] Preparing to send version message...")
 
-        nonce = randint(0, (1 << 64) - 1)
-        start_height = get_blockchain_height()
-
         version_message = VersionMessage(
             version=PROTOCOL_VERSION,
             services=SERVICES,
@@ -148,16 +142,12 @@ class Peer:
             recver_port=self.addr[1],
             sender_ip=self.node.external_ip,
             sender_port=self.node.port,
-            nonce=nonce,
-            start_height=start_height,
+            nonce=randint(0, (1 << 64) - 1),
+            start_height=get_blockchain_height(),
             user_agent=USER_AGENT
         )
 
-        version_envelopeelope = MessageEnvelope(
-            command=version_message.command,
-            payload=version_message.payload,
-        )
-        await self.send_message(version_envelopeelope)
+        await self.send_message(version_message)
     
     async def send_getblocks(self):
         await self.send_message(
@@ -189,13 +179,14 @@ class Peer:
 
     async def close(self):
         log.info(f"[{self.str_ip}] Closing connection...")
-        if self.last_recv_timestamp != 0:
-            await set_last_seen(self.ip, self.port, self.last_recv_timestamp)
-        
+
         if self.listen_task and not self.listen_task.done():
             log.debug(f"[{self.str_ip}] Cancelling listen task.")
             self.listen_task.cancel()
 
+        if self.last_recv_timestamp != 0:
+            await set_last_seen(self.ip, self.port, self.last_recv_timestamp)
+            
         try:
             self.writer.close()
             await self.writer.wait_closed()
@@ -206,19 +197,15 @@ class Peer:
             self.node.remove_peer(self) 
         
     def ping(self):
-        task = asyncio.create_task(self._ping_task())
-        self.node.add_task(task)
+        self.node.spawn(asyncio.create_task(self._ping_task()))
 
     async def _ping_task(self) -> None:  # Creates a ping task
         # Reset pong_future
         if self.pong_future.done():
             self.pong_future = asyncio.Future()
 
-        ping_msg = PingMessage()
-        envelope = MessageEnvelope(command=ping_msg.command, payload=ping_msg.payload)
-
         time_ping_sent = time.time() 
-        await self.send_message(envelope)
+        await self.send_message(PingMessage())
 
         time_pong_received = await asyncio.wait_for(self.pong_future, timeout=PING_TIMEOUT)
         self.latest_ping_time_ms = int((time_pong_received - time_ping_sent) * 1000)
@@ -238,12 +225,10 @@ class Peer:
         """Returns how long ago this node sent a tx"""
         return int(time.time()) - self.last_tx_timestamp
 
-
     @property
     def last_send_ago(self) -> int | None:  # Last time YOU sent to PEER
         """Returns how long ago you sent a message from this peer"""
         return int(time.time()) - self.last_send_timestamp
-
 
     @property
     def last_recv_ago(self) -> int | None:  # Last time PEER sent to YOU

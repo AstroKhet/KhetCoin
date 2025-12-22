@@ -18,6 +18,8 @@ from utils.fmt import format_age, format_bytes
 log = logging.getLogger(__name__)
 PEERS_SQL = APP_CONFIG.get("path", "peers")
 
+_frame_id = 42
+
 class ManagePeersFrame(tk.Frame):
     def __init__(self, parent, controller, node: Node):
         super().__init__(parent)
@@ -271,7 +273,7 @@ class ManagePeersFrame(tk.Frame):
                 self.tree_peers.set(iid, "connection_time", format_age(int(time.time() )- peer.time_created))
                 
         # Peer list updating
-        if self.node.check_updated_peers():
+        if self.node.check_updated_peers(_frame_id):
             self._generate_peer_list_treeview()
             if self.node.get_peer_by_id(self.selected_peer_id) is None:  # Selected peer disconnected
                 self.lf_details.config(text=self.lf_details.cget('text') + " (Disconnected)")

@@ -1,10 +1,10 @@
 import tkinter as tk
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from tkinter import ttk
 
 from crypto.key import wif_encode
-from db.utxo import get_utxo_count_to_addr, get_utxo_value_to_addr
+from db.utxo import get_utxo_count_to_addr, get_utxo_set_to_addr, get_utxo_value_to_addr
 from db.tx import get_tx_timestamp
 from db.tx_history import get_tx_history
 from gui.bindings import bind_hierarchical, mousewheel_cb
@@ -16,36 +16,55 @@ from networking.node import Node
 from utils.fmt import truncate_bytes
 
 
+_frame_id = 31
+
+
 class YourWalletFrame(tk.Frame):
     def __init__(self, parent, controller, node: Node):
         super().__init__(parent)
         self.controller = controller
         self.node = node
 
+        self.utxo_set_to_node = get_utxo_set_to_addr(self.node.pk_hash)
+        
         # Left side
         frame_left = tk.Frame(self)
         frame_left.place(relx=0, rely=0, relwidth=0.5, relheight=1.0)
 
+        # Title
         label_wallet = tk.Label(frame_left, text=f"{self.node.name}'s wallet", font=SansFont(16, weight="bold"), )
         label_wallet.pack(anchor="w", padx=20, pady=(20, 15))
 
+        # Wallet Address
         label_addr = tk.Label(frame_left, text="ADDRESS", font=SansFont(10), fg="gray")
         label_addr.pack(anchor="w", padx=20, pady=(0, 5))
 
         frame_pk_wif = tk.Frame(frame_left)
         frame_pk_wif.pack(anchor="w", padx=20, pady=(0, 30))  # padding applied here
 
-        label_pk_wif = tk.Label(frame_pk_wif,  text=wif_encode(self.node.pk_hash),  font=("Courier", 10))
+        label_pk_wif = tk.Label(frame_pk_wif, text=wif_encode(self.node.pk_hash),  font=("Courier", 10))
         label_pk_wif.pack(side="left")
 
         btn_pk_wif_copy = ttk.Button(frame_pk_wif, text="Copy", command=lambda: copy_to_clipboard(self, wif_encode(self.node.pk_hash)))
         btn_pk_wif_copy.pack(side="left", padx=(10, 0))
 
-        label_balance = tk.Label(frame_left, text="BALANCE", font=SansFont(10), fg="gray")
-        label_balance.pack(anchor="w", padx=20, pady=(0, 5))
+        avail_utxo_set_to_node = (self.utxo_set_to_node - self.node.mempool.spent_mempool_utxos) | self.node.mempool.new_mempool_utxos_to_node
+        avail_balance = sum(utxo.value for utxo in avail_utxo_set_to_node)
+        total_balance = sum(utxo.value for utxo in self.utxo_set_to_node)
+        
+        # Available Balance
+        label_avail_balance = tk.Label(frame_left, text="AVAILABLE BALANCE", font=SansFont(10), fg="gray")
+        label_avail_balance.pack(anchor="w", padx=20)
+        
+        self.label_avail_amount = tk.Label(frame_left,  text=f"{avail_balance/KTC}KTC",  font=SansFont(20, weight="bold"))
+        self.label_avail_amount.pack(anchor="w", padx=20, pady=(0, 10))
 
-        self.label_amount = tk.Label(frame_left,  text=f"{get_utxo_value_to_addr(self.node.pk_hash)/KTC} KTC",  font=SansFont(20, weight="bold"))
-        self.label_amount.pack(anchor="w", padx=20)
+        # Total Balance
+        label_total_balance = tk.Label(frame_left, text="TOTAL BALANCE", font=SansFont(10), fg="gray")
+        label_total_balance.pack(anchor="w", padx=20, pady=(0, 5))
+
+        self.label_total_amount = tk.Label(frame_left,  text=f"{total_balance/KTC} KTC",  font=SansFont(14, weight="bold"))
+        self.label_total_amount.pack(anchor="w", padx=20)
 
         frame_utxo = tk.Frame(frame_left)
         frame_utxo.pack(anchor="w", padx=20, pady=(0, 30)) 
@@ -172,9 +191,17 @@ class YourWalletFrame(tk.Frame):
         if not self._is_active:
             return
         
-        if self.node.check_updated_blockchain(4):
-            self.label_amount.config(text=f"{get_utxo_value_to_addr(self.node.pk_hash)/KTC} KTC")
-            self.label_utxo.config(text=f"From {get_utxo_count_to_addr(self.node.pk_hash)} UTXO(s)")
+        if self.node.mempool.check_update_valids(_frame_id) or self.node.mempool.check_update_orphans(_frame_id):
+            self.utxo_set_to_node = get_utxo_set_to_addr(self.node.pk_hash)
+            total_balance = sum(utxo.value for utxo in self.utxo_set_to_node)
+            self.label_total_amount.config(text=f"{total_balance/KTC:.8f} KTC")
+            self.label_utxo.config(text=f"From {len(self.utxo_set_to_node)} UTXO(s)")
+            
+            avail_utxo_set_to_node = (self.utxo_set_to_node - self.node.mempool.spent_mempool_utxos) | self.node.mempool.new_mempool_utxos_to_node
+            avail_balance = sum(utxo.value for utxo in avail_utxo_set_to_node)
+            self.label_avail_amount.config(text=f"{avail_balance/KTC:.8f} KTC")
+            
+        if self.node.check_updated_blockchain(_frame_id):
             self._display_recent_txs()
         
         self.after(500, self._update)

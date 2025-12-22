@@ -71,32 +71,31 @@ class Node:
         log.info(f"Node starting...")
         self._shutdown_requested.clear()
 
-        server_task = asyncio.create_task(self.start_server())
-        self.add_task(server_task)
+        self.spawn(self._start_server())
 
         if self._shutdown_requested.is_set():
             log.error(f"Exiting run() because server failed to start.")
-            await self.close_server()
+            await self._close_server()
             return
 
-        processor_task = asyncio.create_task(self._message_processor_loop())
-        self.add_task(processor_task)
-
-        connect_initial_task = asyncio.create_task(self._connect_initial_peers())
-        self.add_task(connect_initial_task)
-
-        peer_rotation_task = asyncio.create_task(self._rotate_peers())
-        self.add_task(peer_rotation_task)
+        log.info("Spawning Node startup tasks...")
+        self.spawn(self._message_processor_loop())
+        self.spawn(self._connect_initial_peers())
+        self.spawn(self._rotate_peers())
 
         log.info(f"Node running. Waiting for shutdown signal...")
         self.is_running = True
         await self._shutdown_requested.wait()
 
         log.info(f"Shutdown requested. Cleaning up...")
-        await self.close_server()
+        await self._close_server()
         log.info(f"Node finished.")
+        
+    async def shutdown(self):
+        log.info(f"External shutdown triggered.")
+        self._shutdown_requested.set()
 
-    async def start_server(self):
+    async def _start_server(self):
         try:
             self.server = await asyncio.start_server(
                 self._handle_incoming_connection, "0.0.0.0", self.port
@@ -112,54 +111,52 @@ class Node:
 
         self.is_running = True
        
-    async def shutdown(self):
-        log.info(f"External shutdown triggered.")
-        self._shutdown_requested.set()
+    async def _close_server(self):
+        log.info("Shutting down server...")
 
-    async def close_server(self):
         self.is_running = False
         self.server_start_time = 0
-        
-        awaitables = []
 
         if self.server:
-            log.debug("Closing server...")
+            log.debug("Closing server socket...")
             self.server.close()
+            try:
+                await self.server.wait_closed()
+            except Exception as e:
+                log.warning(f"Error while waiting for server to close: {e}")
             self.server = None
 
+        # Cancel all background tasks
         tasks_to_cancel = list(self._tasks)
         self._tasks.clear()
+        for task in tasks_to_cancel:
+            task.cancel()
 
         peers_to_close = list(self.peers)
         self.peers.clear()
         self._updated_peers = 0
 
-        for peer in peers_to_close:
-            awaitables.append(peer.close())
+        awaitables = [peer.close() for peer in peers_to_close]
+        awaitables.extend(tasks_to_cancel)
 
-        for task in tasks_to_cancel:
-            task.cancel()
-            awaitables.append(task)
-                
-        await asyncio.gather(*awaitables, return_exceptions=True)
+        results = await asyncio.gather(*awaitables, return_exceptions=True)
+        for r in results:
+            if isinstance(r, Exception) and not isinstance(r, asyncio.CancelledError):
+                log.warning(f"Exception during shutdown: {r}")
+
+        log.info("Server shutdown complete.")
      
     async def _message_processor_loop(self):
         log.info("Message processor loop started.")
         while not self._shutdown_requested.is_set():
+            peer, message_envelope = await self.msg_processor_queue.get()
             try:
-                peer, message_envelope = await self.msg_processor_queue.get()
-                # Concurrent message processing
-                # processor_task = asyncio.create_task(
-                #     self.processor.process_message(peer, message_envelope)
-                # )
-                # self.add_task(processor_task)
-
-                # Single message processing
                 await self.msg_processor.process_message(peer, message_envelope)
-                self.msg_processor_queue.task_done()
-
             except Exception as e:
                 log.exception(f"Error in message processor loop: {e}")
+            finally:
+                # Remove the task regardless (otherwise it STOPS once an exception raises!!! definitely didnt take 2 days to realise this !!!)
+                self.msg_processor_queue.task_done()
 
         log.info("Message processor loop finished.")
 
@@ -190,13 +187,11 @@ class Node:
         # Start listening to peer
         log.info(f"[{peer.str_ip}] Connected as peer no. {peer.session_id}; Starting handshake")
 
-        listen_task = asyncio.create_task(peer.listen(), name=f"Listen_{peer.str_ip}")
+        listen_task = self.spawn(peer.listen())
         peer.listen_task = listen_task
-        self.add_task(listen_task)
 
         # Send VersionMessage
         await peer.send_version()
-
         try:
             log.debug(f"[{peer.str_ip}] Waiting for handshake established future")
             established = await asyncio.wait_for(peer.established, timeout=HANDSHAKE_TIMEOUT)
@@ -240,9 +235,7 @@ class Node:
         peer = Peer(self, reader, writer, name, session_id=self.next_peer_id, direction="outbound")
         self.peer_id_lookup[self.next_peer_id] = peer
         self.next_peer_id += 1
-        listen_task = asyncio.create_task(peer.listen())
-        peer.listen_task = listen_task
-        self.add_task(listen_task)
+        peer.listen_task = self.spawn(peer.listen())
 
         try:
             await peer.send_version()
@@ -253,7 +246,7 @@ class Node:
                 self._updated_peers = 0
                 
                 if initial:
-                    self.add_task(asyncio.create_task(peer.send_message(MempoolMessage())))
+                    await peer.send_message(MempoolMessage())
                 if peer.height > self.block_tip_index.height:
                     await peer.send_getblocks()
             else:
@@ -270,11 +263,8 @@ class Node:
             return 
 
         for peer_id, name, ip, port, added, last_seen, services in peers_to_connect:
-            self.add_task(
-                asyncio.create_task(
-                    self._connect_to_peer((ip, port), name, initial=True)
-                )
-            )
+            self.spawn(self._connect_to_peer((ip, port), name, initial=True))
+
 
     async def _rotate_peers(self):
         timeout = APP_CONFIG.get("node", "peer_inactive_timeout")
@@ -292,19 +282,23 @@ class Node:
                     
             await asyncio.sleep(1)
                 
-    def add_task(self, task: asyncio.Task):
-        def task_done(task: asyncio.Task):
+    def spawn(self, coro):
+        task = self.loop.create_task(coro)
+        self._tasks.add(task)
+
+        def task_done(t: asyncio.Task):
             try:
-                task.result()  # This re-raises if the task had an exception
+                t.result()
             except asyncio.CancelledError:
                 pass
             except Exception as e:
-                log.exception(f"Task failed: {e}")
+                log.exception(f"Task Failed: {e}")
+                self._shutdown_requested.set()
             finally:
-                self._tasks.discard(task)
+                self._tasks.discard(t)
 
-        self._tasks.add(task)
         task.add_done_callback(task_done)
+        return task
 
     def broadcast(self, 
         message,
@@ -329,8 +323,11 @@ class Node:
             max(0, min(sample, len(target_peers)))
         )
 
-        for peer in target_peers:
-            self.add_task(asyncio.create_task(peer.send_message(message)))
+        for peer in target_peers:  #run coro threadsafe as broadcast is not async
+            asyncio.run_coroutine_threadsafe(
+                peer.send_message(message),
+                self.loop
+            )
 
     def remove_peer(self, peer: Peer):
         self.peers.discard(peer)

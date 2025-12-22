@@ -51,9 +51,7 @@ def get_tx_history(up_to=None) -> dict[bytes, tuple[int, int, int]]:
                         
                     if not cur.prev():
                         break             
-        
     return history
-
 
 
 def append_tx_history(block: Block, pk_hash: bytes):
@@ -68,9 +66,9 @@ def append_tx_history(block: Block, pk_hash: bytes):
             
             total_in = total_out = 0
             for tx_in in tx.inputs:
-                if script_pubkey := tx_in.script_pubkey():
+                if script_pubkey := tx_in.fetch_script_pubkey():
                     if pk_hash == script_pubkey.get_script_pubkey_receiver():
-                        total_in += tx_in.value() or 0
+                        total_in += tx_in.fetch_value() or 0
                         
             for tx_out in tx.outputs:
                 if pk_hash == tx_out.script_pubkey.get_script_pubkey_receiver():
@@ -81,7 +79,8 @@ def append_tx_history(block: Block, pk_hash: bytes):
             else:
                 value = tx_hash + int_to_bytes(0, 8) + int_to_bytes(total_in, 8) + int_to_bytes(total_out, 8)
 
-            db.put(int_to_bytes(block_index.height, 8), value)
+            if value != (0, 0, 0):
+                db.put(int_to_bytes(block_index.height, 8), value)
         
         
 def delete_tx_history(height: int):

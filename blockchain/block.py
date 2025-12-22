@@ -152,7 +152,7 @@ class Block:
     def verify(self, full=True) -> bool:
         # Full means verify a block with all its transactions
         # Otherwise we are just validating a header
-        log.info(f"Verifying Block<{self.hash()}>...")
+        log.info(f"Verifying Block<{self.hash().hex()}>...")
 
         # TODO enforce block target checks
         if not self.check_proof_of_work():
@@ -206,7 +206,7 @@ class Block:
         else:
             log.warning("Full block requried for block verification!")
             return False
-
+        log.info(f"Block verified <{self.hash().hex()}>")
         return True
 
     def size(self):
@@ -240,7 +240,7 @@ class Block:
         return self.merkle_tree.root()
     
     def __hash__(self):
-        return self.hash()
+        return bytes_to_int(self.hash())
     
     def __eq__(self, other):
         return self.hash() == other.hash()

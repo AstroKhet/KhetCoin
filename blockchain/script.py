@@ -170,6 +170,12 @@ class Script:
     
     def __add__(self, other: 'Script') -> 'Script':
         return Script(self.commands + other.commands)
+    
+    def __hash__(self):
+        return bytes_to_int(HASH256(self.serialize()))
+    
+    def __eq__(self, other):
+        return hash(self) == hash(other)
 
 
 def P2PKH_script_pubkey(pk_hash: bytes) -> Script:

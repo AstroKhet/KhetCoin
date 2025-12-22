@@ -14,6 +14,9 @@ from utils.fmt import format_age, format_epoch
 
 ADDRESSES_SQL = APP_CONFIG.get("path", "addresses")
 
+_frame_id = 35
+
+
 class SavedAddressesFrame(tk.Frame):
     def __init__(self, parent, controller, node):
         super().__init__(parent)

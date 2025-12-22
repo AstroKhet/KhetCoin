@@ -9,14 +9,13 @@ from blockchain.constants import TX_VERSION, P2PKH_INPUT_SIZE, P2PKH_OUTPUT_SIZE
 from blockchain.script import Script, P2PKH_script_pubkey
 from blockchain.transaction import Transaction, TransactionInput, TransactionOutput
 from crypto.key import get_private_key, wif_decode
-from db.utxo import get_utxo_set_to_addr, get_utxo_value_to_addr
+from db.utxo import get_utxo_set_to_addr
 from gui.bindings import bind_entry_prompt
 from gui.common.scrollable import create_scrollable_frame, create_scrollable_treeview
 from gui.common.transaction import tx_popup
 from gui.vcmd import register_VCMD_INT, register_VMCD_KTC
 from gui.helper import center_popup
 from ktc_constants import KTC, MAX_KHETS
-from networking.messages.envelope import MessageEnvelope
 from networking.messages.types.inv import InvMessage
 from networking.node import Node
 from utils.config import APP_CONFIG
@@ -26,6 +25,9 @@ from wallet.algorithm import get_recommended_fee_rate, select_utxos
 log = logging.getLogger(__name__)
 ADDRESSES_SQL = APP_CONFIG.get("path", "addresses")
 
+_frame_id = 34
+
+
 class PayFrame(tk.Frame):
     def __init__(self, parent, controller, node: Node):
         super().__init__(parent)
@@ -34,6 +36,9 @@ class PayFrame(tk.Frame):
         
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
+        
+        self.utxo_set_to_node = get_utxo_set_to_addr(self.node.pk_hash)
+        self.avail_utxo_set_to_node = (self.utxo_set_to_node - self.node.mempool.spent_mempool_utxos) | self.node.mempool.new_mempool_utxos_to_node
         
         # 0. Spinbox value input validator commands
         self.vcmd_khets = register_VCMD_INT(self)
@@ -89,21 +94,29 @@ class PayFrame(tk.Frame):
         self.btn_add_recipient.pack(side="left", padx=2)
         self.btn_clear_all = ttk.Button(self.frame_options, text="Remove All", command=self._remove_all_blocks)
         self.btn_clear_all.pack(side="left", padx=2)
-
-        balance_val = get_utxo_value_to_addr(self.node.pk_hash) / KTC
+        
         self.btn_wallet = ttk.Button(self.frame_options, text="Wallet", command=lambda: self.controller.switch_to_frame("your_wallet"))
         self.btn_wallet.pack(side="right", padx=2)
-        self.label_balance = tk.Label(self.frame_options, text=f"Balance: {balance_val:.8f} KTC")
-        self.label_balance.pack(side="right", padx=2)
+        
+        avail_balance = sum(utxo.value for utxo in self.avail_utxo_set_to_node)
+        self.label_avail_balance = tk.Label(self.frame_options, text=f"Available balance: {avail_balance/KTC:.8f}KTC")
+        self.label_avail_balance.pack(side="right", padx=2)
 
         self._selected_tx: Transaction | None = None
         self._add_recipient_block()
         self._toggle_fee_widgets_state()
         
         # For quick address lookup
-        self._contacts = None
+        self._contacts = []
+        self._is_active = True
+    
+    def on_hide(self):
+        self._is_active = False
         
     def on_show(self):
+        self._is_active = True
+        self._update()
+        
         with sqlite3.connect(ADDRESSES_SQL) as con:
             cur = con.cursor()
             cur.execute("SELECT * FROM addresses")
@@ -228,10 +241,15 @@ class PayFrame(tk.Frame):
         # op_value: total value of all outputs (including sfv and non-sfv)
         sfv_value, op_value = 0, 0
         for frame_recipient, output_fields in self.recipient_frames.items():
-            value = output_fields["value"].get()
+            try:
+                value = output_fields["value"].get()
+            except tk.TclError:
+                frame_recipient.config(bg="pink")
+                messagebox.showerror(title="Error creating transaction", message="Invalid value entry.", detail="Value cannot be empty.")
+                frame_recipient.config(bg="white")
             if value == 0:
                 frame_recipient.config(bg="pink")
-                messagebox.showerror(title="Error creating transaction", message="Invalid value entry.", detail="You cannot input 0 as payment amount (see red highlight)!")
+                messagebox.showerror(title="Error creating transaction", message="Invalid value entry.", detail="You cannot input 0 as payment amount!")
                 frame_recipient.config(bg="white")
                 return
             
@@ -243,7 +261,7 @@ class PayFrame(tk.Frame):
             op_value += int(value)
         
         # 0.2 Get UTXO set & sanity checks
-        utxo_set = get_utxo_set_to_addr(self.node.pk_hash)
+        utxo_set = self.avail_utxo_set_to_node
         utxo_value = sum(utxo.value for utxo in utxo_set)
         if op_value > utxo_value:
             messagebox.showerror(title="Error creating transaction", message="Insufficient funds!", detail=f"You need at least {(op_value - utxo_value)/KTC:.8f} KTC more to complete this transaction")
@@ -302,11 +320,13 @@ class PayFrame(tk.Frame):
         
         inputs = []
         for utxo in utxo_guess:
+            prev_output = TransactionOutput(value=utxo.value, script_pubkey=utxo.script_pubkey)
             inputs.append(TransactionInput(
                 prev_hash=utxo.tx_hash,
                 prev_index=utxo.index,
                 script_sig=Script([]),
-                sequence=0xffffffff
+                sequence=0xffffffff,
+                prev_output=prev_output
             ))
             
         outputs = []
@@ -315,7 +335,7 @@ class PayFrame(tk.Frame):
             
             if pk_hash is None:
                 frame_recipient.config(bg="pink")
-                messagebox.showerror(title="Error creating transaction", message="One or more invalid payment address (see red highlight). Ensure it follows valid WIF format.")
+                messagebox.showerror(title="Error creating transaction", message="One or more invalid payment address. Ensure it follows valid WIF format.")
                 return
             
             frame_recipient.config(bg="white")
@@ -329,7 +349,7 @@ class PayFrame(tk.Frame):
                 value -= ceil(fee * value / sfv_value)
                 if value < 0:
                     frame_recipient.config(bg="pink")
-                    messagebox.showerror(title="Error creating transaction", message="Invalid value entry.", detail="Insufficient amount to cover fees. Try turning off subtract by fee (see red highlight).")
+                    messagebox.showerror(title="Error creating transaction", message="Invalid value entry.", detail="Insufficient amount to cover fees. Try turning off subtract by fee.")
                     frame_recipient.config(bg="white")
                     return
                 
@@ -368,10 +388,8 @@ class PayFrame(tk.Frame):
     
     def _send_tx(self):
         # 1. InvMessage creation
-        inv_msg = InvMessage([(1, self._selected_tx.hash())])
-        msg = MessageEnvelope(inv_msg.command, inv_msg.payload)
         if len(self.node.peers) > 0:
-            self.node.broadcast(msg)
+            self.node.broadcast(InvMessage([(1, self._selected_tx.hash())]))
         else:
             if not messagebox.askokcancel("No Peers", "Your node is not connected to any peers. Continuing will add the transaction only to your mempool. Proceed anyways?"):
                 return
@@ -431,4 +449,16 @@ class PayFrame(tk.Frame):
         entry_addr.event_generate("<FocusIn>")
         entry_addr.delete(0, tk.END)
         entry_addr.insert(0, self._contacts[iid][1])
+    
+    def _update(self):
+        if not self._is_active:
+            return
+        
+        if self.node.mempool.check_update_mempool(_frame_id):
+            self.utxo_set_to_node = get_utxo_set_to_addr(self.node.pk_hash)
+            self.avail_utxo_set_to_node = (self.utxo_set_to_node - self.node.mempool.spent_mempool_utxos) | self.node.mempool.new_mempool_utxos_to_node
             
+            avail_balance = sum(utxo.value for utxo in self.avail_utxo_set_to_node)
+            self.label_avail_balance.config(text=f"{avail_balance/KTC:.8f}KTC")
+        
+        self.after(500, self._update)

@@ -10,9 +10,9 @@ from utils.helper import int_to_bytes, bytes_to_int
 log = logging.getLogger(__name__)
 
 class MessageEnvelope:
-    def __init__(self, command: bytes, payload: bytes = b""):
-        self.command = command.strip(b"\x00")
-        self.payload = payload
+    def __init__(self, message):
+        self.command = message.command.strip(b"\x00")
+        self.payload = message.payload
 
         message_class = COMMAND_MAP.get(self.command)
         if not message_class:

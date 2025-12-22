@@ -15,8 +15,12 @@ def tx_popup(parent, tx: Transaction, type_: str):
         """
         type_ (str) : "orphan" | "valid"
         """
+        if type_ == "orphan":
+            title = "Orphan Transaction"
+        else:
+            title = "Mempool Transaction"
         win = tk.Toplevel(parent)
-        win.title(f"{type_.capitalize()} Transaction")
+        win.title(title)
         win.geometry("800x500")
 
         win.rowconfigure(0, weight=5, uniform="win_row")
@@ -44,12 +48,12 @@ def tx_popup(parent, tx: Transaction, type_: str):
 
         for i, tx_in in enumerate(tx.inputs, start=1):
             script_sig = tx_in.script_sig
-            script_pk = tx_in.script_pubkey()
+            script_pk = tx_in.fetch_script_pubkey()
             if tx.is_coinbase():
                 addr = "Coinbase"
             else:
                 addr = script_sig.get_script_sig_sender() or "N/A"
-            value = f"{tx_in.value()/KTC:.8f}KTC" if tx_in.value() is not None else "N/A"
+            value = f"{tx_in.fetch_value()/KTC:.8f}KTC" if tx_in.fetch_value() is not None else "N/A"
 
             frame_input = tk.Frame(frame_tx_io)
             frame_input.grid(row=i, column=0, sticky="we", padx=2, pady=2)
@@ -90,7 +94,7 @@ def tx_popup(parent, tx: Transaction, type_: str):
                 text += " (change)"
             tk.Label(frame_output, text=text, fg="gray").grid(row=1, column=0, sticky="w")
 
-
+        bind_hierarchical("<MouseWheel>", frame_tx_io, lambda e: mousewheel_cb(e, cnv_details))
         
         # 2. Transaction Summary
         lf_meta = ttk.LabelFrame(win, text="Summary")
@@ -148,7 +152,6 @@ def tx_popup(parent, tx: Transaction, type_: str):
             tk.Label(frame_meta_right, text="Fee rate:").grid(row=1, column=0, sticky="w")
             tk.Label(frame_meta_right, text=f"N/A").grid(row=1, column=1, sticky="e")   
     
-        bind_hierarchical("<MouseWheel>", frame_main, lambda e: mousewheel_cb(e, cnv_details))
         return win
     
 def script_popup(parent, script_sig: Script | None=None, script_pubkey: Script | None=None, tx_hash: bytes = None):
