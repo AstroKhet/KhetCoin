@@ -99,8 +99,10 @@ class NodeFrame(tk.Frame):
         self.update_idletasks()
         
         self.node.port = APP_CONFIG.get("node", "port")
+        external_ip = None
         if self.node.external_ip is None:
             external_ip = setup_port_forwarding(self.node.port, self.node.name)
+            
         if external_ip is None:
             self.label_ip_addr.config(text="Error")
             messagebox.showerror("Invalid IP", "Your IP port was not forwarded properly. Try changing your network port")
