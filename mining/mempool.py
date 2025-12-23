@@ -61,9 +61,9 @@ class Mempool:
             self._updated_orphans = 0
             log.info("Successfully saved to orphan pool")
         else:
-            if (fee_rate := tx.fee_rate() * 1000) < APP_CONFIG.get("node", "min_relay_fee_rate"):
-                log.info(f"Valid transaction <{tx.hash().hex()}> rejected as fee rate ({fee_rate} khets/KB) is too low.")
-                return False
+            # if (fee_rate := tx.fee_rate() * 1024) < APP_CONFIG.get("node", "min_relay_fee_rate"):
+            #     log.info(f"Valid transaction <{tx.hash().hex()}> rejected as fee rate ({fee_rate} khets/KB) is too low.")
+            #     return False
             
             self._valid_txs[tx_hash] = tx
             self._updated_valids = 0
