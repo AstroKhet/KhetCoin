@@ -3,8 +3,6 @@ import time
 import logging
 
 from multiprocessing import Process, Queue, Value, cpu_count
-import psutil
-
 from blockchain.block import Block
 from blockchain.header import Header
 from blockchain.merkle_tree import MerkleTree
