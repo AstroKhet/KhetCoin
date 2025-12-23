@@ -233,7 +233,7 @@ class Peer:
             time_pong_received = await asyncio.wait_for(self.pong_future, timeout=PING_TIMEOUT)
         except asyncio.TimeoutError:
             log.info(f"[{self.str_ip}] No pong message received within {PING_TIMEOUT}s after pinging. Disconnecting peer...")
-            self.close()
+            await self.close()
         self.latest_ping_time_ms = int((time_pong_received - time_ping_sent) * 1000)
         self.ping_times.append(self.latest_ping_time_ms)
 

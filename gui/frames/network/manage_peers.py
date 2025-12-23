@@ -94,7 +94,7 @@ class ManagePeersFrame(tk.Frame):
             "Connection Time",
             "Last Block", "Last Transaction", "Last Send", "Last Receive",
             "Sent", "Received",
-            "Ping Time", "Min Ping", "Time Offset"
+            "Ping Time", "Min Ping", "Last Ping", "Avg. Ping", "Time Offset"
         ]
 
         for i, field_name in enumerate(detail_fields):
@@ -200,7 +200,9 @@ class ManagePeersFrame(tk.Frame):
             "Sent": format_bytes(peer.bytes_sent),
             "Received": format_bytes(peer.bytes_recv),
             "Ping Time": f"{peer.latest_ping_time_ms} ms",
-            "Min Ping": "N/A" if not peer.ping_times else f"{min(peer.ping_times)} ms",
+            "Min Ping": "N/A" if not peer.ping_times else f"{min(peer.ping_times)}ms",
+            "Last Ping": "N/A" if not peer.ping_times else f"{peer.ping_times[-1]}ms",
+            "Avg. Ping": "N/A" if not peer.ping_times else f"{round(sum(peer.ping_times)/len(peer.ping_times))}ms",
             "Time Offset": format_age(peer.time_offset),
         }
 

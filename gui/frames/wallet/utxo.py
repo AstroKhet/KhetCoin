@@ -82,7 +82,11 @@ class UTXOFrame(tk.Frame):
         reverse = (order == "Descending")
         
         # This filtering ensures that spent utxos (grayed out) are on those that exists in the actual UTXO set
-        unavail_utxo_set_to_node = set(utxo for utxo in self.utxos_spent if get_utxo_exists(utxo.tx_hash + int_to_bytes(utxo.index)))
+        unavail_utxo_set_to_node = {
+            utxo for utxo in self.utxos_spent
+            if get_utxo_exists(utxo.tx_hash + int_to_bytes(utxo.index)) and utxo.owner == self.node.pk_hash
+        }
+
         if var == "Time":
             avail_utxo_set_to_node = sorted(self.utxos_to_node, key=lambda utxo: utxo.timestamp, reverse=reverse)
             unavail_utxo_set_to_node = sorted(unavail_utxo_set_to_node, key=lambda utxo: utxo.timestamp, reverse=reverse)

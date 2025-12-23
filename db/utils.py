@@ -1,7 +1,7 @@
 from io import BytesIO
 import os
 
-from db.constants import INDEX_DB, LMDB_ENV, BLOCKS_DB, HEIGHT_DB, TX_DB, ADDR_DB, TX_HISTORY_DB, UTXO_DB
+from db.constants import INDEX_DB, LMDB_ENV, BLOCKS_DB, HEIGHT_DB, MEMPOOL_DB, TX_DB, ADDR_DB, TX_HISTORY_DB, UTXO_DB
 from utils.fmt import print_bytes, truncate_bytes
 from utils.helper import bytes_to_int
 from utils.config import APP_CONFIG
@@ -37,7 +37,8 @@ def print_lmdb():
         "TX_DB": TX_DB,
         "TX_HISTORY_DB": TX_HISTORY_DB, 
         "UTXO_DB": UTXO_DB,
-        "ADDR_DB": ADDR_DB
+        "ADDR_DB": ADDR_DB,
+        "MEMPOOL_DB": MEMPOOL_DB
     }
 
     for name, db in dbs.items():
@@ -117,7 +118,11 @@ def print_lmdb():
                         print(
                             "║ {:<98} │ {:<98} ║".format(f"tx={tx}, idx={idx}", f"{truncate_bytes(value, ends=4)}")
                         )
-
+                    elif name == "MEMPOOL_DB":
+                        tx = key.hex()
+                        print(
+                            "║ {:<98} │ {:<98} ║".format(f"{tx=}", f"{truncate_bytes(value, ends=8)}")
+                        )
         print("╚" + "═" * w + "╧" + "═" * w + "╝")
 
 

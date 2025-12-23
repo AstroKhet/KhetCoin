@@ -391,9 +391,9 @@ class MiningFrame(tk.Frame):
     def _show_more_info(self):
         info_msg = """Mining in Khetcoin is the process of varying the candidate block's nonce and its coinbase transaction's script_sig until the block's 32-byte hash falls below the target value.
         \nYou will receive the full coinbase reward for any block you successfully mine.
-        \nThe number of mining processes determines how many workers run concurrently. You should try to find the ideal number of processes on your PC, as while more processes increase CPU usage, total hash rate may not scale linearly (and may even fall off if your CPU's logical processes > CPU cores)
+        \nThe number of mining processes determines how many workers run concurrently. You should try to find the ideal number of processes on your PC. While more processes increase CPU usage, the total hashrate may not scale linearly (and may even fall off if your CPU's logical processes > CPU cores)
         \nThe minimum fee before mining is the total fee of all transactions in your mempool when mining begins. After pressing "Start Mining", your node continuously monitors the mempool for new transactions or ones already mined by others.
-        \nSetting the minimum fee to 0 KTC is valid; the block will simply contain a coinbase transaction that pays the current block reward to you. You are highly advised to do this in the early stages of KhetCoin.
+        \nSetting the minimum fee to 0 KTC is valid; the miner will still mine a block that contain a coinbase transaction paying the current block reward to you. You are advised to do this when the mempool is empty.
         \nThe transactions your node is currently mining will be highlighted in the mempool.
         """
         messagebox.showinfo("Mining in Khetcoin App", info_msg)

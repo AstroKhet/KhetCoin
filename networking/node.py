@@ -112,6 +112,8 @@ class Node:
         self.is_running = False
         self.server_start_time = 0
 
+        self.mempool.save_mempool()
+        log.info(f"Mempool saved with {len(self.mempool._valid_txs) + len(self.mempool._orphan_txs)} txs")
         if self.server:
             log.debug("Closing server socket...")
             self.server.close()

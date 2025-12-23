@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 BLOCKCHAIN_DIR = APP_CONFIG.get("path", "blockchain")
 
 
-def process_new_block(block, node, peer):
+def process_new_block(block, node):
     if not block.verify():
         return
     
@@ -29,24 +29,24 @@ def process_new_block(block, node, peer):
 
     # 1.1 Block extends active chain
     if block.prev_block == node.block_tip_index.hash:
-        connect_block(block, node, peer)
+        connect_block(block, node)
         
     # 2. Block extends forked chain
     else:
         if block_index.chainwork > node.block_tip_index.chainwork:
-            reorg_blockchain(node.block_tip_index, block_index, node, peer)
+            reorg_blockchain(node.block_tip_index, block_index, node)
         else:
             # Nothing happens
             pass
         
     adopted = {o_block for o_block in node.orphan_blocks if get_block_exists(o_block.prev_block)}
     for o_block in adopted:
-        process_new_block(o_block, node, peer)
+        process_new_block(o_block, node)
     
     node.orphan_blocks -= adopted
 
         
-def connect_block(block: Block, node, peer):
+def connect_block(block: Block, node):
     """Extends `block` to the active blockchain
     
     This includes
@@ -78,8 +78,7 @@ def connect_block(block: Block, node, peer):
     node.broadcast(
         InvMessage(
             [(BLOCK_TYPE, block.hash())]
-        ),
-        exclude=peer
+        )
     )
     
     log.info(f"Block connected: {block.hash().hex()}")
@@ -113,7 +112,7 @@ def disconnect_block(block: Block, node):
     log.info(f"Block disconnected: {block.hash().hex()}")
     
 
-def reorg_blockchain(old_tip_index: BlockIndex, new_tip_index: BlockIndex, node, peer):
+def reorg_blockchain(old_tip_index: BlockIndex, new_tip_index: BlockIndex, node):
     fork_index = get_fork_index(old_tip_index, new_tip_index)
     
     # 1. Backtrack all blocks until fork point
@@ -133,7 +132,7 @@ def reorg_blockchain(old_tip_index: BlockIndex, new_tip_index: BlockIndex, node,
         index = index.get_prev_index()
     
     for block in reversed(to_connect):
-        connect_block(block, node, peer)
+        connect_block(block, node)
         
 
         
