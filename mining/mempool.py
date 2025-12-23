@@ -3,8 +3,8 @@ import time
 
 from blockchain.transaction import Transaction
 from db.mempool import load_mempool, save_mempool
-from db.tx import get_tx, get_tx_exists, get_tx_timestamp
-from db.utxo import UTXO, get_utxo, get_utxo_exists
+from db.tx import get_tx_exists, get_tx_timestamp
+from db.utxo import UTXO, get_utxo
 from networking.constants import TX_TYPE
 from networking.messages.types.inv import InvMessage
 from utils.config import APP_CONFIG
