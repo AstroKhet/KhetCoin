@@ -95,21 +95,16 @@ class NodeFrame(tk.Frame):
         self._update()
     
     def _start_node(self):
-        self.label_ip_addr.config(text="Configuring...")
-        self.update_idletasks()
-        
         self.node.port = APP_CONFIG.get("node", "port")
-        external_ip = None
         if self.node.external_ip is None:
-            external_ip = setup_port_forwarding(self.node.port, self.node.name)
+            self.node.external_ip = setup_port_forwarding(self.node.port, self.node.name)
             
-        if external_ip is None:
+        if self.node.external_ip is None:
             self.label_ip_addr.config(text="Error")
             messagebox.showerror("Invalid IP", "Your IP port was not forwarded properly. Try changing your network port")
             return
         
-        self.label_ip_addr.config(text=f"{external_ip}:{self.node.port}")
-        self.node.external_ip = external_ip
+        self.label_ip_addr.config(text=f"{self.node.external_ip}:{self.node.port}")
         self.controller.start_node()
         self.btn_server.config(text="Shutdown Node", bg="#dc3545", command=self._close_node)
         
