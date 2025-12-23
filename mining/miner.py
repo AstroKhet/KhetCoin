@@ -2,7 +2,7 @@ import threading
 import time
 import logging
 
-from multiprocessing import Process, Queue, Value
+from multiprocessing import Process, Queue, Value, cpu_count
 import psutil
 
 from blockchain.block import Block
@@ -28,7 +28,7 @@ class Miner:
     The scriptSig for the coinbase transaction will be a 64 byte big-endian integer by default, used purely for mining.
     """
     def __init__(self, processes=None):
-        self.cpu_count = psutil.cpu_count(logical=False)
+        self.cpu_count = cpu_count()
         if processes is None:
             self.no_processes = self.cpu_count
         else:
