@@ -3,3 +3,4 @@ base58==2.1.1
 coincurve==21.0.0
 lmdb==1.7.5
 miniupnpc==2.3.3
+psutil==5.9.0
