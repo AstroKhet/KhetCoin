@@ -1,4 +1,3 @@
-import logging
 
 from setup.functions import configure_logging, run_initial_setup
 from utils.config import APP_CONFIG

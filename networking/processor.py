@@ -1,26 +1,21 @@
 from io import BytesIO
 import logging
-import asyncio
 import time
+
 
 from blockchain.block import Block
 from blockchain.transaction import Transaction
-
 from crypto.hashing import HASH256
-from db.block import get_block_exists, get_block_height_at_hash, get_block_locator_hashes, get_raw_block, get_raw_header
-from db.functions import connect_block, process_new_block, reorg_blockchain, save_block_data
-from db.height import get_block_hash_at_height, get_blockchain_height
-from db.index import BlockIndex, get_block_index
-from db.tx import get_tx_exists, get_tx
-
+from db.block import get_block_exists, get_block_height_at_hash, get_raw_block, get_raw_header
+from db.functions import process_new_block
+from db.height import get_block_hash_at_height
+from db.index import get_block_index
 from db.peers import load_all_active_peers, save_peer_from_addr
-
-from networking.constants import BLOCK_TYPE, GETADDR_LIMIT, GETBLOCKS_LIMIT, GETHEADERS_LIMIT, PROTOCOL_VERSION, TX_TYPE
+from db.tx import get_tx_exists, get_tx
+from networking.constants import BLOCK_TYPE, GETADDR_LIMIT, GETBLOCKS_LIMIT, GETHEADERS_LIMIT, TX_TYPE
 from networking.messages.envelope import MessageEnvelope
 from networking.messages.types import *
 from networking.peer import Peer
-
-from utils.config import APP_CONFIG
 from utils.helper import encode_ip, int_to_bytes, int_to_bytes
 from utils.ip import is_routable
 
@@ -115,12 +110,13 @@ class MessageProcessor:
             addresses.add(addr)
 
         # default limit = 8, chosen by random
+        # right now it just returns
         active_peers = await load_all_active_peers()
         
         if active_peers:
             active_peers = active_peers[:GETADDR_LIMIT]
-            for peer_id, name, ip, port, added, last_seen, services in active_peers:
-                addr = (last_seen, services, ip, port)
+            for peer_meta in active_peers:
+                addr = (peer_meta.last_seen, peer_meta.services, peer_meta.ip_bytes, peer_meta.port)
                 addresses.add(addr)
 
             addr_msg = AddrMessage(list(addresses))
@@ -236,7 +232,7 @@ class MessageProcessor:
             return
         
         # 1. Now we know that the block is valid and extends off the blockchain DAG somewhere
-        process_new_block(block, self.node)
+        process_new_block(block, self.node, peer)
         
         # 2. If the block is successfully verified & saved, this tells us that the peer is at least at that block's height
         if index := get_block_index(block.hash()):

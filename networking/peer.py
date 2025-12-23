@@ -66,6 +66,7 @@ class Peer:
         self.pong_future = asyncio.Future()
         self.latest_ping_time_ms = None
         self.ping_times: List[float] = []
+        self.last_ping = 0
         self.ping()
 
         # Variables derived after handshake
@@ -78,32 +79,52 @@ class Peer:
         # asyncio variables
         self.established = asyncio.Future()
         self.listen_task: asyncio.Task | None = None
+        self._closed = False
         log.debug(f"[{self.str_ip}] Peer object created.")
 
     async def read_message(self) -> MessageEnvelope | None:
         try:
             envelope = await MessageEnvelope.parse_async(self.reader)
-            
+
+            # accounting
             self.bytes_recv += envelope.payload_size
             self.node.bytes_recv += envelope.payload_size
             self.last_recv_timestamp = int(time.time())
-            
-            print("RECEIVE", type(envelope.message))
+
             if isinstance(envelope.message, BlockMessage):
                 self.last_block_timestamp = self.last_recv_timestamp
             elif isinstance(envelope.message, TxMessage):
                 self.last_tx_timestamp = self.last_recv_timestamp
-                
-            log.info(f"[{self.str_ip}] Received message: \n{envelope}")
+
+            log.debug(
+                f"[{self.str_ip}] Received {type(envelope.message).__name__}"
+            )
             return envelope
-        except (asyncio.IncompleteReadError, ConnectionResetError, EOFError) as e:
-            log.warning(f"[{self.str_ip}] Connection closed: {type(e).__name__}")
+
+        except (
+            asyncio.IncompleteReadError,
+            ConnectionResetError,
+            ConnectionAbortedError,
+            EOFError,
+        ) as e:
+            log.info(f"[{self.str_ip}] Peer disconnected ({type(e).__name__})")
             await self.close()
             return None
-        except Exception as e:
-            log.exception(f"[{self.str_ip}] Unexpected error: {e}")
+
+        except asyncio.CancelledError:
+            log.debug(f"[{self.str_ip}] read_message cancelled")
+            raise
+
+        except ValueError as e:
+            log.warning(f"[{self.str_ip}] Protocol error: {e}. Dropping peer.")
             await self.close()
             return None
+
+        except Exception:
+            log.exception(f"[{self.str_ip}] Unexpected error in read_message")
+            await self.close()
+            return None
+
 
     async def send_message(self, msg):
         """Sends `msg` to this peer"""
@@ -178,23 +199,23 @@ class Peer:
         await self.close()
 
     async def close(self):
-        log.info(f"[{self.str_ip}] Closing connection...")
+        if self._closed:
+            return
+        self._closed = True
 
-        if self.listen_task and not self.listen_task.done():
-            log.debug(f"[{self.str_ip}] Cancelling listen task.")
-            self.listen_task.cancel()
+        log.info(f"[{self.str_ip}] Closing connection")
 
-        if self.last_recv_timestamp != 0:
-            await set_last_seen(self.ip, self.port, self.last_recv_timestamp)
-            
         try:
+            if self.last_recv_timestamp:
+                await set_last_seen(self.ip, self.port, self.last_recv_timestamp)
+
             self.writer.close()
             await self.writer.wait_closed()
-            log.debug(f"[{self.str_ip}] Writer closed.")
+
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
-            log.warning(f"[{self.str_ip}] Error closing writer; peer might have had an ungraceful shutdown.\n{e}")
-        finally:
-            self.node.remove_peer(self) 
+            log.debug(f"[{self.str_ip}] Error during close (ignored): {e}")
         
     def ping(self):
         self.node.spawn(self._ping_task())
@@ -205,9 +226,14 @@ class Peer:
             self.pong_future = asyncio.Future()
 
         time_ping_sent = time.time() 
+        self.last_ping = int(time.time())
         await self.send_message(PingMessage())
-
-        time_pong_received = await asyncio.wait_for(self.pong_future, timeout=PING_TIMEOUT)
+        
+        try:
+            time_pong_received = await asyncio.wait_for(self.pong_future, timeout=PING_TIMEOUT)
+        except asyncio.TimeoutError:
+            log.info(f"[{self.str_ip}] No pong message received within {PING_TIMEOUT}s after pinging. Disconnecting peer...")
+            self.close()
         self.latest_ping_time_ms = int((time_pong_received - time_ping_sent) * 1000)
         self.ping_times.append(self.latest_ping_time_ms)
 

@@ -126,3 +126,4 @@ with LMDB_ENV.begin(write=True) as txn:
     TX_HISTORY_DB = LMDB_ENV.open_db(b"tx_history", txn=txn, create=True, dupsort=True)
     UTXO_DB       = LMDB_ENV.open_db(b"utxo", txn=txn, create=True)
     ADDR_DB       = LMDB_ENV.open_db(b"addr", txn=txn, create=True, dupsort=True)
+    MEMPOOL_DB    = LMDB_ENV.open_db(b"mempool", txn=txn, create=True)

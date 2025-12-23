@@ -10,10 +10,10 @@ from blockchain.script import P2PKH_script_pubkey
 from blockchain.transaction import Transaction, TransactionOutput
 from db.block import calculate_block_target
 from db.functions import connect_block, save_block_data
-from db.height import get_block_hash_at_height, get_blockchain_height
+from db.height import get_blockchain_height
 from gui.colours import BTN_NEUTRAL_BLUE, BTN_STOP_RED
 from gui.fonts import MonoFont, SansFont
-from gui.common.columns import TX_COLS
+from gui.common.columns import MEMPOOL_TX_COLS
 from gui.common.scrollable import create_scrollable_treeview
 from gui.common.transaction import tx_popup
 from gui.vcmd import register_VMCD_KTC
@@ -165,7 +165,7 @@ class MiningFrame(tk.Frame):
         self.lf_mempool.rowconfigure(0, weight=1)
         self.lf_mempool.columnconfigure(0, weight=1)
 
-        self.tree_mempool = create_scrollable_treeview(self.lf_mempool, TX_COLS, (0, 0))
+        self.tree_mempool = create_scrollable_treeview(self.lf_mempool, MEMPOOL_TX_COLS, (0, 0))
         self.tree_mempool.bind("<<TreeviewSelect>>", lambda _: self._on_tx_select("valid"))
         self.tree_mempool.tag_configure("highlight", background="#ffd6e0")       
         
@@ -391,7 +391,7 @@ class MiningFrame(tk.Frame):
     def _show_more_info(self):
         info_msg = """Mining in Khetcoin is the process of varying the candidate block's nonce and its coinbase transaction's script_sig until the block's 32-byte hash falls below the target value.
         \nYou will receive the full coinbase reward for any block you successfully mine.
-        \nThe number of mining processes determines how many worker miners run concurrently, up to your CPU's core count. More processes raise CPU usage, though hash rate may not scale linearly. 
+        \nThe number of mining processes determines how many workers run concurrently. While more processes increase CPU usage, total hash rate may not scale linearly due to core and scheduling limitations. 
         \nThe minimum fee before mining is the total fee of all transactions in your mempool when mining begins. After pressing "Start Mining", your node continuously monitors the mempool for new transactions or ones already mined by others.
         \nSetting the minimum fee to 0 KTC is valid; the block will simply contain a coinbase transaction that pays the current block reward to you. You are highly advised to do this in the early stages of KhetCoin.
         \nThe transactions your node is currently mining will be highlighted in the mempool.

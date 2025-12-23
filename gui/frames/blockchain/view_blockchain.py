@@ -12,6 +12,7 @@ from db.block import get_raw_block, get_raw_block_at_height, get_block_height_at
 from db.height import get_block_hash_at_height
 from db.tx import get_tx, get_tx_metadata
 from gui.bindings import bind_entry_prompt, bind_hierarchical, mousewheel_cb
+from gui.common.columns import BLOCK_LIST_COLS, TX_LIST_COLS
 from gui.common.transaction import script_popup
 from gui.common.scrollable import create_scrollable_frame, create_scrollable_treeview
 from gui.helper import reset_widget, attach_tooltip, copy_to_clipboard
@@ -79,17 +80,7 @@ class ViewBlockchainFrame(tk.Frame):
         self.no_block_rows = self.node.block_tip_index.height + 1
         self.no_block_pages = ceil(self.no_block_rows / self.rows_per_page)   # Block 0 Genesis
         
-        block_list_cols = {
-            "height": ("Height", 12),
-            "hash": ("Block Hash", 20),
-            "age": ("Age", 40),
-            "no_txs": ("No. txs", 12),
-            "size": ("Size", 12),
-            "sent": ("Total Sent", 12),
-            "fees": ("Total Fees", 12)
-        }
-
-        self.tree_block_list = create_scrollable_treeview(self.lf_block_list, block_list_cols, (0, 0), xscroll=False)
+        self.tree_block_list = create_scrollable_treeview(self.lf_block_list, BLOCK_LIST_COLS, (0, 0), xscroll=False)
         self.tree_block_list.bind("<<TreeviewSelect>>", self._on_block_select)
 
         frame_block_list_footer = tk.Frame(self.lf_block_list)
@@ -292,8 +283,8 @@ class ViewBlockchainFrame(tk.Frame):
             values = (
                 txiid, 
                 truncate_bytes(tx.hash()),
-                from_ if isinstance(from_, str) else truncate_bytes(from_, ends=4),
-                to if isinstance(to, str) else truncate_bytes(to, ends=4),
+                from_ if isinstance(from_, str) else truncate_bytes(from_),
+                to if isinstance(to, str) else truncate_bytes(to),
                 f"{sum(tx_out.value for tx_out in tx.outputs)/KTC} KTC",
                 f"{tx.fee()/KTC} KTC"
             )
@@ -407,22 +398,13 @@ class ViewBlockchainFrame(tk.Frame):
 
 
         # 2. Transactions in block
-        tx_list_cols = {
-            "index": ("Index", 8),
-            "hash": ("Transaction Hash", 16),
-            "from": ("From", 16),
-            "to": ("To", 16),
-            "amount": ("Amount", 12),
-            "fees": ("Fee", 12),
-        }
-
         frame_tx_list = tk.Frame(frame_block_details)
         frame_tx_list.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         frame_tx_list.rowconfigure(0, weight=1)
         frame_tx_list.columnconfigure(0, weight=1)
 
         # Treeview
-        self.tree_tx_list = create_scrollable_treeview(frame_tx_list, tx_list_cols, (0, 0))
+        self.tree_tx_list = create_scrollable_treeview(frame_tx_list, TX_LIST_COLS, (0, 0))
         self.tree_tx_list.bind("<<TreeviewSelect>>", lambda _: self._on_tx_select(self._selected_block))
 
         # Footer

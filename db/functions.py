@@ -10,6 +10,8 @@ from db.height import delete_height, get_blockchain_height, save_height
 from db.index import BlockIndex, generate_block_index, get_block_index, get_fork_index
 from db.tx_history import append_tx_history, delete_tx_history
 from db.utxo import backtrack_UTXO_set, update_UTXO_set
+from networking.constants import BLOCK_TYPE
+from networking.messages.types.inv import InvMessage
 from utils.config import APP_CONFIG
 from utils.helper import encode_varint, int_to_bytes
 
@@ -17,7 +19,7 @@ log = logging.getLogger(__name__)
 BLOCKCHAIN_DIR = APP_CONFIG.get("path", "blockchain")
 
 
-def process_new_block(block, node):
+def process_new_block(block, node, peer):
     if not block.verify():
         return
     
@@ -27,24 +29,24 @@ def process_new_block(block, node):
 
     # 1.1 Block extends active chain
     if block.prev_block == node.block_tip_index.hash:
-        connect_block(block, node)
+        connect_block(block, node, peer)
         
     # 2. Block extends forked chain
     else:
         if block_index.chainwork > node.block_tip_index.chainwork:
-            reorg_blockchain(node.block_tip_index, block_index, node)
+            reorg_blockchain(node.block_tip_index, block_index, node, peer)
         else:
             # Nothing happens
             pass
         
     adopted = {o_block for o_block in node.orphan_blocks if get_block_exists(o_block.prev_block)}
     for o_block in adopted:
-        process_new_block(o_block, node)
+        process_new_block(o_block, node, peer)
     
     node.orphan_blocks -= adopted
 
         
-def connect_block(block: Block, node):
+def connect_block(block: Block, node, peer):
     """Extends `block` to the active blockchain
     
     This includes
@@ -71,6 +73,14 @@ def connect_block(block: Block, node):
     
     # 5. Set as blockchain tip 
     node.set_tip(block_index)
+    
+    # 6. Broadcast
+    node.broadcast(
+        InvMessage(
+            [(BLOCK_TYPE, block.hash())]
+        ),
+        exclude=peer
+    )
     
     log.info(f"Block connected: {block.hash().hex()}")
 
@@ -103,7 +113,7 @@ def disconnect_block(block: Block, node):
     log.info(f"Block disconnected: {block.hash().hex()}")
     
 
-def reorg_blockchain(old_tip_index: BlockIndex, new_tip_index: BlockIndex, node):
+def reorg_blockchain(old_tip_index: BlockIndex, new_tip_index: BlockIndex, node, peer):
     fork_index = get_fork_index(old_tip_index, new_tip_index)
     
     # 1. Backtrack all blocks until fork point
@@ -123,7 +133,7 @@ def reorg_blockchain(old_tip_index: BlockIndex, new_tip_index: BlockIndex, node)
         index = index.get_prev_index()
     
     for block in reversed(to_connect):
-        connect_block(block, node)
+        connect_block(block, node, peer)
         
 
         

@@ -2,8 +2,11 @@ import logging
 import time
 
 from blockchain.transaction import Transaction
+from db.mempool import load_mempool, save_mempool
 from db.tx import get_tx, get_tx_exists, get_tx_timestamp
 from db.utxo import UTXO, get_utxo, get_utxo_exists
+from networking.constants import TX_TYPE
+from networking.messages.types.inv import InvMessage
 from utils.config import APP_CONFIG
 from utils.helper import int_to_bytes
 
@@ -14,7 +17,9 @@ class Mempool:
     A Mempool object that stores verified & unconfirmed transactions. 
     Mempool object lifetime lasts as long as the Node's session
     """
-    def __init__(self) -> None:
+    def __init__(self, node) -> None:
+        self.node = node
+        
         # 1. Validated transactions are stored in mempool
         self._valid_txs: dict[bytes, Transaction] = dict()
 
@@ -35,13 +40,19 @@ class Mempool:
         self._updated_orphans = 0
 
     def add_tx(self, tx: Transaction) -> bool:
+        log.info(f"Attempting to add tx to mempool: <{tx.hash()}>")
+        if get_tx_exists(tx.hash()):
+            log.info("Tx already exists.")
+            return False
+        
         tx_in_status = self.get_mempool_eligibility(tx)
         if "invalid" in tx_in_status:
+            log.info("Invalid Tx.")
             return False
         
         is_orphan = "orphan" in tx_in_status
         if not tx.verify(allow_orphan=is_orphan):
-            log.warning(f"Failed to verify tx ({is_orphan=})")
+            log.warning(f"Failed to verify tx: ({is_orphan=})")
             return False
         
         tx_hash = tx.hash()
@@ -50,14 +61,21 @@ class Mempool:
             self._updated_orphans = 0
             log.info("Successfully saved to orphan pool")
         else:
-            if (fee_rate := tx.fee_rate() * 1024) < APP_CONFIG.get("node", "min_relay_fee_rate"):
+            if (fee_rate := tx.fee_rate() * 1000) < APP_CONFIG.get("node", "min_relay_fee_rate"):
                 log.info(f"Valid transaction <{tx.hash.hex()}> rejected as fee rate ({fee_rate} khets/KB) is too low.")
                 return False
             
             self._valid_txs[tx_hash] = tx
             self._updated_valids = 0
             log.info("Successfully saved to mempool")
-        
+            
+            self.node.broadcast(
+                InvMessage(
+                    [(TX_TYPE, tx_hash())]
+                )
+            )  # exclude=peer... too lazy to implement...
+            
+            
         time_added = int(time.time())
         self._time_log[tx_hash] = time_added
         
@@ -240,6 +258,20 @@ class Mempool:
         
         for tx in all_txs:
             self.add_tx(tx)
+        
+
+    def load_mempool(self):
+        raw_txs = load_mempool()
+        for raw_tx in raw_txs:
+            try:
+                tx = Transaction.parse(raw_tx)
+                self.add_tx(tx)
+            except:
+                pass
+        
+    def save_mempool(self):
+        raw_txs = list(self._valid_txs.values()) + list(self._orphan_txs.values())
+        save_mempool(raw_txs)
         
         
     # Modifiers for transient GUI variables

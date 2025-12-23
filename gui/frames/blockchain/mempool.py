@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from blockchain.transaction import Transaction
-from gui.common.columns import TX_COLS
+from gui.common.columns import MEMPOOL_TX_COLS
 from gui.common.transaction import tx_popup
 from gui.common.scrollable import create_scrollable_treeview
 from ktc_constants import KTC
@@ -38,7 +38,7 @@ class MempoolFrame(tk.Frame):
         self.lf_valid_txs.rowconfigure(0, weight=1)
         self.lf_valid_txs.columnconfigure(0, weight=1)
 
-        self.tree_valid_txs = create_scrollable_treeview(self.lf_valid_txs, TX_COLS, (0, 0))
+        self.tree_valid_txs = create_scrollable_treeview(self.lf_valid_txs, MEMPOOL_TX_COLS, (0, 0))
         self.tree_valid_txs.bind("<<TreeviewSelect>>", lambda _: self._on_tx_select("valid"))
 
         # 1.2 Orphan txs List
@@ -47,7 +47,7 @@ class MempoolFrame(tk.Frame):
         self.lf_orphan_txs.rowconfigure(0, weight=1)
         self.lf_orphan_txs.columnconfigure(0, weight=1)
 
-        self.tree_orphan_txs = create_scrollable_treeview(self.lf_orphan_txs, TX_COLS, (0, 0))
+        self.tree_orphan_txs = create_scrollable_treeview(self.lf_orphan_txs, MEMPOOL_TX_COLS, (0, 0))
         self.tree_orphan_txs.bind("<<TreeviewSelect>>", lambda _: self._on_tx_select("orphan"))
 
         # 2. Right side: Mempool metadata

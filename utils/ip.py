@@ -13,7 +13,7 @@ def str_ip(addr: tuple, name="") -> str:
         return f"{addr[0]}:{addr[1]}"
 
 
-def encode_ip(ip: bytes | str | int) -> bytes:
+def ip_convert_to_bytes(ip: bytes | str | int) -> bytes:
     """Encode IP (str, bytes, or int) into 16-byte Bitcoin format."""
     ip_obj = ipaddress.ip_address(ip)
 
@@ -23,7 +23,7 @@ def encode_ip(ip: bytes | str | int) -> bytes:
         return ip_obj.packed
 
 
-def format_ip(ip_bytes: bytes) -> str:
+def ip_bytes_to_str(ip_bytes: bytes) -> str:
     """Convert 16-byte or 4-byte Bitcoin IP format to string."""
     if len(ip_bytes) == 4:
         return str(ipaddress.IPv4Address(ip_bytes))

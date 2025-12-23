@@ -5,6 +5,7 @@ from gui.colours import BTN_CONFIG_GRAY, BTN_START_GREEN, BTN_STOP_RED, colour_p
 from networking.node import Node
 from utils.config import APP_CONFIG
 from utils.fmt import format_bytes
+from utils.ip import setup_port_forwarding
 
 # TODO: Add a way to record data sent/recv per session in Node
 # TODO: Add a live graph that updates every 0.5s or so for data transmission rate
@@ -29,17 +30,16 @@ class NodeFrame(tk.Frame):
         label_name.pack(fill="x", pady=(20, 50), padx=10)
 
         # BUTTON to start/stop server
+        is_running = self.node.is_running
         self.btn_server = tk.Button(
             frame_left,
-            text="Start Node",
-            bg=BTN_START_GREEN,
+            text="Start Node" if not is_running else "Shutdown Node",
+            bg=BTN_START_GREEN if not is_running else BTN_STOP_RED,
             fg="white",
             height=2,
             font=("Segue UI", 15, "bold"),
-            command=self._toggle_server_switch
-        )
-        if self.node.is_running:
-            self.btn_server.config(text="Shutdown Node", bg=BTN_STOP_RED)
+            command=self._start_node if not is_running else self._close_node
+        )    
         self.btn_server.pack(fill=tk.BOTH, padx=40, pady=15)
 
         # BUTTON to go to Network/Manage Peers
@@ -60,7 +60,7 @@ class NodeFrame(tk.Frame):
         frame_right.columnconfigure(1, weight=1)
 
         tk.Label(frame_right, text="Your IP Address:", anchor="w").grid(row=0, column=0, sticky="w", padx=5, pady=2)
-        self.label_ip_addr = tk.Label(frame_right, text=f"{self.node.external_ip}:{self.node.port}", anchor="w", padx=5)
+        self.label_ip_addr = tk.Label(frame_right, text="(Node inactive)", anchor="w", padx=5)
         self.label_ip_addr.grid(row=0, column=1, sticky="w", padx=5, pady=2)
 
         # Server uptime
@@ -93,18 +93,28 @@ class NodeFrame(tk.Frame):
     def on_show(self):
         self._is_active = True
         self._update()
+    
+    def _start_node(self):
+        self.label_ip_addr.config(text="Configuring...")
+        self.update_idletasks()
         
-    def _toggle_server_switch(self):
-        if self.btn_server.cget("text") == "Start Node":
-            if self.node.external_ip == "0.0.0.0":
-                messagebox.showerror("Invalid IP", "Your IP port was not forwarded properly.")
-                return
-            self.controller.start_node()
-            self.btn_server.config(text="Shutdown Node", bg="#dc3545")
-        else:
-            self.controller.close_node()
-            self._update()  # Immediately reset uptime
-            self.btn_server.config(text="Start Node", bg="#28a745") 
+        self.node.port = APP_CONFIG.get("node", "port")
+        if self.node.external_ip is None:
+            external_ip = setup_port_forwarding(self.node.port, self.node.name)
+        if external_ip is None:
+            self.label_ip_addr.config(text="Error")
+            messagebox.showerror("Invalid IP", "Your IP port was not forwarded properly. Try changing your network port")
+            return
+        
+        self.label_ip_addr.config(text=f"{external_ip}:{self.node.port}")
+        self.node.external_ip = external_ip
+        self.controller.start_node()
+        self.btn_server.config(text="Shutdown Node", bg="#dc3545", command=self._close_node)
+        
+    def _close_node(self):
+        self.controller.close_node()
+        self.btn_server.config(text="Start Node", bg="#28a745", command=self._start_node)
+        
             
     def _update(self):
         if not self._is_active:
@@ -114,5 +124,7 @@ class NodeFrame(tk.Frame):
         self.label_peers.configure(text=str(len(self.node.peers)))
         self.label_data_sent.configure(text=format_bytes(self.node.bytes_sent))
         self.label_data_received.configure(text=format_bytes(self.node.bytes_recv))
+
+            
 
         self.after(500, self._update)

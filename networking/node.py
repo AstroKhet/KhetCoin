@@ -3,25 +3,20 @@ import logging
 import random
 import time
 
-from typing import Optional, Set, Tuple
-
 from blockchain.block import Block
 from crypto.hashing import HASH160
 from crypto.key import get_public_key
-from db.block import get_block_locator_hashes
 from db.index import BlockIndex, get_block_tip_index
 from db.peers import load_all_peers
 from mining.mempool import Mempool
 from mining.miner import Miner
-from networking.constants import CONNECTION_TIMEOUT, HANDSHAKE_TIMEOUT, PROTOCOL_VERSION
+from networking.constants import CONNECTION_TIMEOUT, HANDSHAKE_TIMEOUT
 from networking.messages.envelope import MessageEnvelope
 from networking.messages.types.getaddr import GetAddrMessage
-from networking.messages.types.getblocks import GetBlocksMessage
 from networking.messages.types.mempool import MempoolMessage
 from networking.peer import Peer
 from networking.processor import MessageProcessor
 from utils.config import APP_CONFIG
-from utils.ip import setup_port_forwarding
 
 log = logging.getLogger(__name__)
 
@@ -30,16 +25,16 @@ class Node:
     def __init__(self, name: str, port: int = 8666, loop=None):
         self.name = name
         self.port = port
-        self.external_ip = setup_port_forwarding(self.port, self.name) or "0.0.0.0"
+        self.external_ip = None # Placeholder first, port forwarding is done when node actually startstup
         
-        self.peers: Set[Peer] = set()
+        self.peers: set[Peer] = set()
         self.pk_hash: bytes = HASH160(get_public_key(name, raw=True))
 
         # Self (server)
         self.server: asyncio.Server | None = None
         self.server_start_time: int = 0
-        self.loop = loop
-        self.mempool = Mempool()
+        self.loop: asyncio.AbstractEventLoop = loop
+        self.mempool = Mempool(self)
         self.miner = Miner()
         
         # Clients (peers)
@@ -50,10 +45,10 @@ class Node:
 
         # Async variables
         self.msg_processor = MessageProcessor(self)
-        self.msg_processor_queue: asyncio.Queue[Tuple[Peer, MessageEnvelope]] = asyncio.Queue()  # For db write serialization
+        self.msg_processor_queue: asyncio.Queue[tuple[Peer, MessageEnvelope]] = asyncio.Queue()  # For db write serialization
 
         self._shutdown_requested = asyncio.Event()
-        self._tasks: Set[asyncio.Task] = set()
+        self._tasks: set[asyncio.Task] = set()
         
         self.is_running = False
         
@@ -70,18 +65,18 @@ class Node:
     async def run(self):
         log.info(f"Node starting...")
         self._shutdown_requested.clear()
-
-        self.spawn(self._start_server())
-
-        if self._shutdown_requested.is_set():
-            log.error(f"Exiting run() because server failed to start.")
-            await self._close_server()
-            return
+        
+        log.info(f"Node accessible via {self.external_ip}:{self.port}")
+        
+        self.mempool.load_mempool()
+        log.info(f"Mempool loaded with {len(self.mempool._valid_txs)} transactions.")
+        
 
         log.info("Spawning Node startup tasks...")
+        self.spawn(self._start_server())
         self.spawn(self._message_processor_loop())
-        self.spawn(self._connect_initial_peers())
-        self.spawn(self._rotate_peers())
+        self.spawn(self._initial_connection_task())
+        self.spawn(self._node_management_task())
 
         log.info(f"Node running. Waiting for shutdown signal...")
         self.is_running = True
@@ -211,27 +206,34 @@ class Node:
                 await peer.close()
 
     async def _connect_to_peer(self, addr: tuple, name: str = "", initial=False):
+        if len(self.peers) >= APP_CONFIG.get("node", "max_peers"):
+            log.info("Cannot connect to peer; max amount reached")
+            return
+
         peer_str_ip = f"{addr[0]}:{addr[1]}"
         log.info(f"[{peer_str_ip}] Attempting to connect...")
         if addr == (self.external_ip, self.port):
-            log.warning(f"[{peer_str_ip}]  Attempted to self connect.")
+            log.warning(f"[{peer_str_ip}] Attempted to self connect.")
             return
         
-        if len(self.peers) >= APP_CONFIG.get("node", "max_peers"):
-            return
 
-        log.debug(f"[{peer_str_ip}] Attempting TCP connection...")
         reader = writer = None
         try:
             reader, writer = await asyncio.wait_for(asyncio.open_connection(addr[0], addr[1]), timeout=CONNECTION_TIMEOUT)
-            log.debug(f"[{peer_str_ip}] TCP connection established. Starting handshake...")
+            log.info(f"[{peer_str_ip}] TCP connection established. Starting handshake...")
+        except TimeoutError:
+            log.info(f"[{peer_str_ip}] Connection not established for {CONNECTION_TIMEOUT}s. Giving up.")
         except ConnectionRefusedError:
             log.info(f"[{peer_str_ip}] Connection refused.")
             return
         except Exception as e:
             log.exception(f"[{peer_str_ip}] Unexpected error attempting TCP connection: {e}")
             return
-
+        
+        if writer is None:
+            log.info(f"[{peer_str_ip}] No writer.")
+            return
+        
         peer = Peer(self, reader, writer, name, session_id=self.next_peer_id, direction="outbound")
         self.peer_id_lookup[self.next_peer_id] = peer
         self.next_peer_id += 1
@@ -255,28 +257,36 @@ class Node:
             log.info(f"[{peer_str_ip}] Error during handshake with peer {peer.str_ip}: {e}")
             await peer.close()
 
-    async def _connect_initial_peers(self):
+    async def _initial_connection_task(self):
         log.info("Connecting to initial peers...")
         peers_to_connect = await load_all_peers()
         peers_to_connect = peers_to_connect[:APP_CONFIG.get("node", "max_peers")]
         if not peers_to_connect:
             return 
 
-        for peer_id, name, ip, port, added, last_seen, services in peers_to_connect:
-            self.spawn(self._connect_to_peer((ip, port), name, initial=True))
+        for peer_meta in peers_to_connect:
+            self.spawn(self._connect_to_peer((peer_meta.ip, peer_meta.port), peer_meta.name, initial=True))
 
 
-    async def _rotate_peers(self):
+    async def _node_management_task(self):
+        """
+        Running loop to manage expiry for peers and mempool txns
+        """
         timeout = APP_CONFIG.get("node", "peer_inactive_timeout")
         while not self._shutdown_requested.is_set():
             now = time.time()
             
-            # 1. Clear inactive peers
             for peer in list(self.peers):
+                # Clear inactive peers
                 if peer.last_recv_ago > timeout:
                     await peer.close()
                     log.info(f"[{peer.str_ip}] Removed inactive peer.")
 
+                # Regular pinging to keep peer alive
+                if (now - peer.last_ping) >= 120:
+                    peer.ping()
+                    
+                # 
                 if (peer.height - self.block_tip_index.height >= 5) and (peer.last_block_ago >= 30):
                      await peer.send_getblocks()
                     
@@ -302,7 +312,7 @@ class Node:
 
     def broadcast(self, 
         message,
-        exclude: Optional[Peer] = None,
+        exclude: Peer | None = None,
         sample: int = APP_CONFIG.get("node", "max_peers"),
         outbound: bool = False
     ):
@@ -330,6 +340,10 @@ class Node:
             )
 
     def remove_peer(self, peer: Peer):
+        task = peer.listen_task
+        if task and not task.done():
+            task.cancel()
+            
         self.peers.discard(peer)
         self.peer_id_lookup.pop(peer.session_id)
         self._updated_peers = 0
