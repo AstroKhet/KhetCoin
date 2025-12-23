@@ -71,7 +71,7 @@ class Mempool:
             
             self.node.broadcast(
                 InvMessage(
-                    [(TX_TYPE, tx_hash())]
+                    [(TX_TYPE, tx_hash)]
                 )
             )  # exclude=peer... too lazy to implement...
             
