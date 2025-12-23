@@ -44,10 +44,10 @@ def get_tx_history(up_to=None) -> dict[bytes, tuple[int, int, int]]:
                     
                     tx_hash   = value[:32]
                     cb_value  = bytes_to_int(value[32:40])
-                    in_value  = bytes_to_int(value[40:48])
-                    out_value = bytes_to_int(value[48:56])
+                    spent     = bytes_to_int(value[40:48])
+                    received  = bytes_to_int(value[48:56])
                     
-                    history[tx_hash] = (cb_value, in_value, out_value)
+                    history[tx_hash] = (cb_value, spent, received)
                         
                     if not cur.prev():
                         break             
@@ -64,29 +64,30 @@ def append_tx_history(block: Block, pk_hash: bytes):
         for tx in block.get_transactions():
             tx_hash = tx.hash()
             
-            total_in = total_out = 0
+            received = spent = 0
             for tx_in in tx.inputs:
-                if script_pubkey := tx_in.fetch_script_pubkey():
-                    if pk_hash == script_pubkey.get_script_pubkey_receiver():
-                        total_in += tx_in.fetch_value() or 0
+                if tx_in.script_sig.get_script_sig_sender() == pk_hash:
+                    spent += tx_in.fetch_value()
                         
             for tx_out in tx.outputs:
                 if pk_hash == tx_out.script_pubkey.get_script_pubkey_receiver():
-                    total_out += tx_out.value
+                    received += tx_out.value
                     
             if tx.is_coinbase():
-                value = tx_hash + int_to_bytes(total_out, 8) + int_to_bytes(0, 8) + int_to_bytes(0, 8)
+                value = tx_hash + int_to_bytes(received, 8) + int_to_bytes(0, 8) + int_to_bytes(0, 8)
             else:
-                value = tx_hash + int_to_bytes(0, 8) + int_to_bytes(total_in, 8) + int_to_bytes(total_out, 8)
-
+                value = tx_hash + int_to_bytes(0, 8) + int_to_bytes(spent, 8) + int_to_bytes(received, 8)
+                
             if value != (0, 0, 0):
                 db.put(int_to_bytes(block_index.height, 8), value)
         
         
 def delete_tx_history(height: int):
-    with LMDB_ENV.begin(db=TX_HISTORY_DB) as db:
+    with LMDB_ENV.begin(db=TX_HISTORY_DB, write=True) as db:
         with db.cursor() as cur:
             if cur.set_key(int_to_bytes(height, 8)):
-                cur.delete(dup=True)
+                while cur.delete():  # deletes current key/value
+                    if not cur.next_dup():  # move to next duplicate
+                        break
 
 

@@ -147,18 +147,18 @@ class YourWalletFrame(tk.Frame):
 
             row = 0
             for tx_hash in tx_hashes:
-                cb_value, in_value, out_value = recent_txs[tx_hash]
+                cb_value, spent, received = recent_txs[tx_hash]
                 
                 if cb_value:
                     self._display_tx(lf_day, row, "COINBASE", tx_hash, cb_value)
                     row += 1
                     
-                if in_value:
-                    self._display_tx(lf_day, row, "INPUT", tx_hash, in_value)
+                if spent:
+                    self._display_tx(lf_day, row, "SPENT", tx_hash, spent)
                     row += 1
 
-                if out_value:
-                    self._display_tx(lf_day, row, "OUTPUT", tx_hash, out_value)
+                if received:
+                    self._display_tx(lf_day, row, "RECEIVED", tx_hash, received)
                     row += 1
 
         bind_hierarchical("<MouseWheel>", self.frame_recent_txs, lambda e: mousewheel_cb(e, self.cnv_recent_txs))
@@ -168,7 +168,7 @@ class YourWalletFrame(tk.Frame):
         label_tx_type = tk.Label(lf_day, text=type_, anchor="w", font=SansFont(10))
         label_tx_type.grid(row=row, column=0, sticky="ew")
         
-        sign, value_color = ("-", "#bf1029") if type_ == "OUTPUT" else ("+", "#3f8f29")
+        sign, value_color = ("-", "#bf1029") if type_ == "SPENT" else ("+", "#3f8f29")
         label_value = tk.Label(lf_day, text=f"{sign}{value/KTC:.8f}KTC", anchor="w", fg=value_color, font=SansFont(10))
         label_value.grid(row=row, column=1, sticky="ew")
         

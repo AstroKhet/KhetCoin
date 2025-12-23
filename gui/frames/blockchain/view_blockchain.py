@@ -259,8 +259,8 @@ class ViewBlockchainFrame(tk.Frame):
                 format_age(time.time() - meta.timestamp),
                 meta.no_txs,
                 format_bytes(meta.full_block_size),
-                f"{meta.total_sent/KTC:.2f} KTC",
-                f"{meta.fee/KTC:.2f} KTC",
+                f"{meta.total_sent/KTC:.2f}KTC",
+                f"{meta.fee/KTC:.2f}KTC",
                 format_epoch(meta.timestamp)
             )
 
@@ -286,7 +286,7 @@ class ViewBlockchainFrame(tk.Frame):
                 from_ if isinstance(from_, str) else truncate_bytes(from_),
                 to if isinstance(to, str) else truncate_bytes(to),
                 f"{sum(tx_out.value for tx_out in tx.outputs)/KTC} KTC",
-                f"{tx.fee()/KTC} KTC"
+                f"{tx.fee()/KTC:.8f} KTC"
             )
 
             self.tree_tx_list.insert("", "end", iid=txiid, values=values)
@@ -352,10 +352,10 @@ class ViewBlockchainFrame(tk.Frame):
             "Nonce": block.nonce,
             "No. txs": meta.no_txs,
             "Total Sent": f"{meta.total_sent / KTC:.2f} KTC",
-            "Fee": f"{meta.fee/KTC} KTC",
-            "Fee/KB": f"{(meta.fee/KTC) / meta.full_block_size * 1024:.2f} KTC/KB",
+            "Fee": f"{meta.fee/KTC:.8f}KTC",
+            "Avg. Fee/KB": f"{(meta.fee) / meta.full_block_size * 1024:.2f} khets/KB",
             "Confirmations": self.node.block_tip_index.height - height,
-            "Minted": f"{calculate_block_subsidy(height)/KTC} KTC",
+            "Minted": f"{calculate_block_subsidy(height)/KTC:.8f}KTC",
             "Block Reward": f"{reward / KTC} KTC",
             "Miner Tag": block.get_miner_tag() or "N/A"
         }
@@ -479,8 +479,8 @@ class ViewBlockchainFrame(tk.Frame):
             "Version": tx.version,
             "Inputs": len(tx.inputs),
             "Outputs": len(tx.outputs),
-            "Input Value": "N/A"if tx.is_coinbase()else f"{sum(tx_in.fetch_value() or 0 for tx_in in tx.inputs)/KTC} KTC",
-            "Output Value": f"{sum(tx_out.value for tx_out in tx.outputs)/KTC} KTC",
+            "Input Value": "N/A"if tx.is_coinbase()else f"{sum(tx_in.fetch_value() or 0 for tx_in in tx.inputs)/KTC:.8f}KTC",
+            "Output Value": f"{sum(tx_out.value for tx_out in tx.outputs)/KTC:.8f}KTC",
             "Size": format_bytes(len(tx.serialize())),
             "Fee": f"{fee} khets",
             "Fee/B": f"{fee/size:.2f} khets/B",

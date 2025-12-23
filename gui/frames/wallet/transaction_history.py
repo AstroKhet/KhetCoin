@@ -27,6 +27,8 @@ class TransactionHistoryFrame(tk.Frame):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
         
+        tk.Label(self, text=f"Transaction History", font=SansFont(20, weight="bold")).grid(row=0, column=0)
+        
         frame_main = ttk.Frame(self)
         frame_main.columnconfigure(0, weight=1)
         frame_main.rowconfigure(0, weight=1)
@@ -74,18 +76,18 @@ class TransactionHistoryFrame(tk.Frame):
 
             row = 0
             for tx_hash in tx_hashes:
-                cb_value, in_value, out_value = self.tx_history[tx_hash]
+                cb_value, spent, received = self.tx_history[tx_hash]
                 
                 if cb_value:
                     self._display_tx(lf_day, row, "COINBASE", tx_hash, cb_value)
                     row += 1
                     
-                if in_value:
-                    self._display_tx(lf_day, row, "INPUT", tx_hash, in_value)
+                if spent:
+                    self._display_tx(lf_day, row, "SPENT", tx_hash, spent)
                     row += 1
 
-                if out_value:
-                    self._display_tx(lf_day, row, "OUTPUT", tx_hash, out_value)
+                if received:
+                    self._display_tx(lf_day, row, "RECEIVED", tx_hash, received)
                     row += 1
                     
         bind_hierarchical("<MouseWheel>", self.frame_history, lambda e: mousewheel_cb(e, self.cnv_history))
@@ -94,7 +96,7 @@ class TransactionHistoryFrame(tk.Frame):
         label_tx_type = tk.Label(lf_day, text=type_, anchor="w", font=SansFont(10), width=10)
         label_tx_type.grid(row=row, column=0, sticky="ew")
         
-        sign, value_color = ("-", "#bf1029") if type_ == "OUTPUT" else ("+", "#3f8f29")
+        sign, value_color = ("-", "#bf1029") if type_ == "SPENT" else ("+", "#3f8f29")
         label_value = tk.Label(lf_day, text=f"{sign}{value/KTC:.8f}KTC", anchor="w", fg=value_color, font=SansFont(10), width=25)
         label_value.grid(row=row, column=1, sticky="ew")
         
