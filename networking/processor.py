@@ -133,7 +133,7 @@ class MessageProcessor:
                 
         # Relay addresses to 2 other random peers
         addr_msg = AddrMessage(msg.addresses)
-        await self.node.broadcast(
+        self.node.broadcast(
             message=addr_msg,
             exclude=peer,
             sample=2

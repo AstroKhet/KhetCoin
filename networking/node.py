@@ -218,7 +218,6 @@ class Node:
             log.warning(f"[{peer_str_ip}] Attempted to self connect.")
             return
         
-
         reader = writer = None
         try:
             reader, writer = await asyncio.wait_for(asyncio.open_connection(addr[0], addr[1]), timeout=CONNECTION_TIMEOUT)

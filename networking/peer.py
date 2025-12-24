@@ -79,7 +79,6 @@ class Peer:
         # asyncio variables
         self.established = asyncio.Future()
         self.listen_task: asyncio.Task | None = None
-        self._closed = False
         log.debug(f"[{self.str_ip}] Peer object created.")
 
     async def read_message(self) -> MessageEnvelope | None:
@@ -108,21 +107,18 @@ class Peer:
             EOFError,
         ) as e:
             log.info(f"[{self.str_ip}] Peer disconnected ({type(e).__name__})")
-            await self.close()
             return None
 
         except asyncio.CancelledError:
             log.debug(f"[{self.str_ip}] read_message cancelled")
-            raise
+            return None
 
         except ValueError as e:
             log.warning(f"[{self.str_ip}] Protocol error: {e}. Dropping peer.")
-            await self.close()
             return None
 
         except Exception:
             log.exception(f"[{self.str_ip}] Unexpected error in read_message")
-            await self.close()
             return None
 
 
@@ -187,7 +183,7 @@ class Peer:
             
             envelope = await self.read_message()
             if envelope is None:
-                continue
+                self.close()
 
             try:
                 await self.node.msg_processor_queue.put((self, envelope))
@@ -199,9 +195,6 @@ class Peer:
         await self.close()
 
     async def close(self):
-        if self._closed:
-            return
-
         log.info(f"[{self.str_ip}] Closing connection")
 
         try:
@@ -217,7 +210,7 @@ class Peer:
             log.debug(f"[{self.str_ip}] Error during close (ignored): {e}")
         finally:
             self.node.remove_peer(self)
-            self._closed = True
+
         
     def ping(self):
         self.node.spawn(self._ping_task())
