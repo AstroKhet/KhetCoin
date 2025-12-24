@@ -184,6 +184,7 @@ class Peer:
             envelope = await self.read_message()
             if envelope is None:
                 self.close()
+                return
 
             try:
                 await self.node.msg_processor_queue.put((self, envelope))
