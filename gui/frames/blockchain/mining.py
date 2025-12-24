@@ -304,7 +304,7 @@ class MiningFrame(tk.Frame):
                 version=1,
                 prev_block=tip_index.hash,
                 timestamp=int(time.time()),
-                bits=target_to_bits(calculate_block_target(height)),
+                bits=target_to_bits(calculate_block_target(height, tip_index.prev_hash)),
                 nonce=0,
                 txs=txs
             )

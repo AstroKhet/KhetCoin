@@ -5,7 +5,7 @@ import logging
 from typing import List, BinaryIO
 from io import BytesIO
 
-from db.block import get_block_height_at_hash
+from db.block import calculate_block_target, get_block_height_at_hash
 from utils.helper import bits_to_target, bytes_to_int, read_varint, encode_varint
 from blockchain.header import Header
 from blockchain.transaction import Transaction
@@ -149,12 +149,23 @@ class Block:
     def check_proof_of_work(self) -> bool:
         return bytes_to_int(self.hash()) < self.target
 
-    def verify(self, full=True) -> bool:
+    def verify(self) -> bool:
         # Full means verify a block with all its transactions
         # Otherwise we are just validating a header
         log.info(f"Verifying Block<{self.hash().hex()}>...")
 
+        if (prev_height := get_block_height_at_hash(self.prev_block)) is not None:
+            height = prev_height + 1
+        else:
+            log.info("Tried to verify orphan block. Rejected.")
+            return False
+        
         # TODO enforce block target checks
+        target = calculate_block_target(height, prev_hash=self.prev_block)
+        if self.target != target:
+            log.info(f"Invalid block target, got {self.target} but expected {target}")
+            return False
+        
         if not self.check_proof_of_work():
             log.warning("Invalid proof of work.")
             return False
@@ -168,44 +179,41 @@ class Block:
             log.warning(f"Block size exceeds {MAX_BLOCK_SIZE}B")
             return False
 
-        if full:
-            log.info("Header validated. Verifying transactions...")
-            mtree = MerkleTree(self._tx_hashes)
-            if mtree.root()!= self.merkle_tree.root():  # LE
-                log.warning("Calculated merkle root mismatch")
-                return False
-
-            # Verify that there exists only 1 coinbase transaction
-            coinbase_tx = self._transactions[0]
-            if (not coinbase_tx.is_coinbase()):
-                log.warning("First transaction is not a coinbase transaction.")
-                return False
-
-            if any(tx.is_coinbase() for tx in self._transactions[1:]):
-                log.warning("Coinbase transaction should only be in first transaction")
-                return False
-
-            # Verify coinbase reward
-            height = get_block_height_at_hash(self.prev_block)
-            if height is None:
-                log.warning("Previous block is not saved locally or does not exist at all.")
-                return False
-            height += 1
-
-            block_subsidy = calculate_block_subsidy(height)
-            fees = sum(tx.fee() for tx in self._transactions)
-            block_reward = sum(out.value for out in coinbase_tx.outputs)
-
-            if block_reward > block_subsidy + fees:
-                log.warning("block_reward > block_subsidy + fees")
-                return False
-
-            if not all(tx.verify() for tx in self._transactions):
-                log.warning("Invalid transaction in block")
-                return False
-        else:
-            log.warning("Full block requried for block verification!")
+        log.info("Header validated. Verifying transactions...")
+        mtree = MerkleTree(self._tx_hashes)
+        if mtree.root()!= self.merkle_tree.root():  # LE
+            log.warning("Calculated merkle root mismatch")
             return False
+
+        # Verify that there exists only 1 coinbase transaction
+        coinbase_tx = self._transactions[0]
+        if (not coinbase_tx.is_coinbase()):
+            log.warning("First transaction is not a coinbase transaction.")
+            return False
+
+        if any(tx.is_coinbase() for tx in self._transactions[1:]):
+            log.warning("Coinbase transaction should only be in first transaction")
+            return False
+
+        # Verify coinbase reward
+        height = get_block_height_at_hash(self.prev_block)
+        if height is None:
+            log.warning("Previous block is not saved locally or does not exist at all.")
+            return False
+        height += 1
+
+        block_subsidy = calculate_block_subsidy(height)
+        fees = sum(tx.fee() for tx in self._transactions)
+        block_reward = sum(out.value for out in coinbase_tx.outputs)
+
+        if block_reward > block_subsidy + fees:
+            log.warning("block_reward > block_subsidy + fees")
+            return False
+
+        if not all(tx.verify() for tx in self._transactions):
+            log.warning("Invalid transaction in block")
+            return False
+
         log.info(f"Block verified <{self.hash().hex()}>")
         return True
 

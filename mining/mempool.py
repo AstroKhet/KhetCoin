@@ -97,7 +97,9 @@ class Mempool:
             if tx_out.is_change():
                 script_pk = tx_out.script_pubkey
                 utxo = UTXO(script_pk.get_script_pubkey_receiver(), tx_out.value, tx_hash, i, time_added, script_pk)
-                self.new_mempool_utxos_to_node.add(utxo)
+                if utxo.owner == self.node.pk_hash:
+                    print(f"Added {utxo=} to new mempool utxos to node!")
+                    self.new_mempool_utxos_to_node.add(utxo)
             
             # Check if any outputs satisfy as parents to orphan txs
             outpoint = (tx_hash, i)

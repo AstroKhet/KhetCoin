@@ -6,6 +6,7 @@ from pathlib import Path
 from db.constants import *
 
 from db.height import get_block_hash_at_height, get_blockchain_height
+from db.index import get_block_index
 from ktc_constants import GENESIS_HASH, HIGHEST_TARGET, ONE_DAY, RETARGET_INTERVAL
 from utils.helper import bits_to_target, bytes_to_int, int_to_bytes
 from utils.config import APP_CONFIG
@@ -150,14 +151,15 @@ def median_time_past() -> int:
     return timestamps[len(timestamps) // 2]
 
 
-def calculate_block_target(height: int) -> int | None:
+def calculate_block_target(height: int, prev_hash) -> int | None:
     if height < RETARGET_INTERVAL:
         return HIGHEST_TARGET
     
-    if (prev_header := get_raw_header_at_height(height - 1)):
-        prev_target =  bits_to_target(prev_header[72:76])
-    else:
-        return None
+    if (prev_index := get_block_index(prev_hash)) is None:
+        return
+    
+    prev_header = get_raw_header(prev_index.hash)
+    prev_target = bits_to_target(prev_header[72:76])
     
     # Non-retargetting height
     if height % RETARGET_INTERVAL != 0:
@@ -165,13 +167,20 @@ def calculate_block_target(height: int) -> int | None:
     
     # Retargetting height
     else:
-        if (start_header := get_raw_header_at_height(height - RETARGET_INTERVAL)):
+        start_index = prev_index
+        for _ in range(RETARGET_INTERVAL - 1):
+            if start_index := get_block_index(start_index.prev_hash):
+                continue
+            else:
+                return False
+            
+        start_header = get_raw_header(start_index.hash)
+        if start_header:
             start_time = bytes_to_int(start_header[68:72])
         else:
             return None
-
-        end_time = bytes_to_int(prev_header[68:72])
- 
+            
+        end_time = bytes_to_int(start_header[68:72])
         t_elapsed = end_time - start_time
         new_target = int(prev_target * t_elapsed / ONE_DAY)
         
