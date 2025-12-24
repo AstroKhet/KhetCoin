@@ -87,7 +87,8 @@ class Mempool:
                 self._orphan_registry[outpoint] = tx_hash
                 self._orphan_missing_utxo.setdefault(tx_hash, set()).add(outpoint)
 
-            script_pk = tx_in.fetch_script_pubkey()
+            prev_tx_out = tx_in.fetch_tx_output() or self._valid_txs.get(tx_in.prev_tx_hash)[tx_in.prev_index]
+            script_pk = prev_tx_out.fetch_script_pubkey()
             timestamp = get_tx_timestamp(tx_in.prev_tx_hash) or self._time_log.get(tx_in.prev_tx_hash, 0) or 0
             utxo = UTXO(script_pk.get_script_pubkey_receiver(), tx_in.fetch_value(), tx_in.prev_tx_hash, tx_in.prev_index, timestamp, script_pk)
             self.spent_mempool_utxos.add(utxo)
@@ -97,6 +98,7 @@ class Mempool:
             if tx_out.is_change():
                 script_pk = tx_out.script_pubkey
                 utxo = UTXO(script_pk.get_script_pubkey_receiver(), tx_out.value, tx_hash, i, time_added, script_pk)
+                print(utxo.owner)
                 if utxo.owner == self.node.pk_hash:
                     print(f"Added {utxo=} to new mempool utxos to node!")
                     self.new_mempool_utxos_to_node.add(utxo)
