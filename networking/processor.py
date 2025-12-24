@@ -232,7 +232,7 @@ class MessageProcessor:
             return
         
         # 1. Now we know that the block is valid and extends off the blockchain DAG somewhere
-        process_new_block(block, self.node, peer)
+        process_new_block(block, self.node)
         
         # 2. If the block is successfully verified & saved, this tells us that the peer is at least at that block's height
         if index := get_block_index(block.hash()):

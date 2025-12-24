@@ -40,7 +40,7 @@ class Mempool:
         self._updated_orphans = 0
 
     def add_tx(self, tx: Transaction) -> bool:
-        log.info(f"Attempting to add tx to mempool: <{tx.hash()}>")
+        log.info(f"Attempting to add tx to mempool: <{tx.hash().hex()}>")
         if get_tx_exists(tx.hash()):
             log.info("Tx already exists.")
             return False
