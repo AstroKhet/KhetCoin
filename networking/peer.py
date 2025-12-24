@@ -183,7 +183,7 @@ class Peer:
             
             envelope = await self.read_message()
             if envelope is None:
-                self.close()
+                await self.close()
                 return
 
             try:

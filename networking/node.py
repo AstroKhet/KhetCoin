@@ -113,7 +113,12 @@ class Node:
         self.server_start_time = 0
 
         self.mempool.save_mempool()
-        log.info(f"Mempool saved with {len(self.mempool._valid_txs) + len(self.mempool._orphan_txs)} txs")
+        log.info(
+            f"Mempool saved with "
+            f"{len(self.mempool._valid_txs) + len(self.mempool._orphan_txs)} txs"
+        )
+
+        # Close server socket first (stop new connections)
         if self.server:
             log.debug("Closing server socket...")
             self.server.close()
@@ -123,25 +128,31 @@ class Node:
                 log.warning(f"Error while waiting for server to close: {e}")
             self.server = None
 
-        # Cancel all background tasks
-        tasks_to_cancel = list(self._tasks)
-        self._tasks.clear()
-        for task in tasks_to_cancel:
-            task.cancel()
-
         peers_to_close = list(self.peers)
         self.peers.clear()
         self._updated_peers = 0
 
-        awaitables = [peer.close() for peer in peers_to_close]
-        awaitables.extend(tasks_to_cancel)
+        tasks_to_cancel = list(self._tasks)
+        self._tasks.clear()
 
+        # Cancel background tasks
+        for task in tasks_to_cancel:
+            task.cancel()
+
+        awaitables = []
+
+        for peer in peers_to_close:
+            awaitables.append(peer.close())
+
+        awaitables.extend(tasks_to_cancel)
         results = await asyncio.gather(*awaitables, return_exceptions=True)
+
         for r in results:
             if isinstance(r, Exception) and not isinstance(r, asyncio.CancelledError):
                 log.warning(f"Exception during shutdown: {r}")
 
         log.info("Server shutdown complete.")
+
      
     async def _message_processor_loop(self):
         log.info("Message processor loop started.")
