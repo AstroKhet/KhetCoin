@@ -21,10 +21,8 @@ def configure_logging() -> logging.Logger:
         force=True,
     )
 
-    return logging.getLogger(__name__)
 
-
-def run_initial_setup(logger: logging.Logger) -> None:
+def run_initial_setup() -> None:
     """
     Perform initial setup if it has not already been done.
     Sets up folders, database, fonts, and runs SetupApp.
@@ -45,6 +43,6 @@ def run_initial_setup(logger: logging.Logger) -> None:
         APP_CONFIG.set("app", "initial_setup", True)
 
     except Exception as e:
-        logger.exception("Initial setup failed")
+        print(f"Initial setup failed {e}")
         raise
 

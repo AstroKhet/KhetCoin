@@ -19,17 +19,13 @@ def launch_app() -> None:
 
 
 def main():
-    """
-    Main entry point.
-    """
-    logger = configure_logging()
-
     try:
-        run_initial_setup(logger)
-    except Exception:
-        logger.error("Aborting due to setup failure")
+        run_initial_setup()
+    except Exception as e:
+        print(f"Setup Error {e}")
         return
 
+    configure_logging()
     launch_app()
 
 
