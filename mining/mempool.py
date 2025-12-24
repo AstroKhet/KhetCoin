@@ -133,13 +133,13 @@ class Mempool:
             prev_tx_hash = tx_in.prev_tx_hash
             prev_id = tx_in.prev_index
             
-            script_pk = tx_in.fetch_script_pubkey()
-            timestamp = get_tx_timestamp(tx_hash) or 0
-            utxo = UTXO(script_pk.get_script_pubkey_receiver(), tx_in.fetch_value(), prev_tx_hash, prev_id, timestamp, script_pk)
+
             
             # 1. Does prev_tx exist?
             if get_tx_exists(prev_tx_hash):
-                
+                script_pk = tx_in.fetch_script_pubkey()
+                timestamp = get_tx_timestamp(tx_hash) or 0
+                utxo = UTXO(script_pk.get_script_pubkey_receiver(), tx_in.fetch_value(), prev_tx_hash, prev_id, timestamp, script_pk) 
                 # 1.1 YES prev_tx | NO prev_id 
                 if tx_in.fetch_tx_output() is None:
                     log.info("Outpoint references a valid transaction but an invalid index. Rejected.")
