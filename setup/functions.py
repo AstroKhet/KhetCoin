@@ -7,7 +7,9 @@ def configure_logging() -> logging.Logger:
     Configure the logging system and return a logger for this module.
     """
     log_path = APP_CONFIG.get("path", "log")
-
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.touch(exist_ok=True)
+    
     logging.basicConfig(
         level=logging.INFO,
         format=(
