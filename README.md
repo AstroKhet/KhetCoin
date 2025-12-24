@@ -8,27 +8,31 @@ Installation
 ------------
 
 1. Clone this repository:
-   
+
        git clone https://github.com/AstroKhet/Khetcoin.git
 
-2. Create a virtual environment in the project folder:
-   
-       python -m venv venv
+2. Change into the project directory:
 
-3. Activate the virtual environment:
+       cd KhetCoin
+
+3. Create a virtual environment in the project folder:
+
+       python -m venv .venv
+
+4. Activate the virtual environment:
    - Windows:
-       
-         venv\Scripts\activate
-   - Mac/Linux:
-       
-         source venv/bin/activate
 
-4. Install dependencies:
-   
+         .venv\\Scripts\\activate
+   - Mac/Linux:
+
+         source .venv/bin/activate
+
+5. Install dependencies:
+
        pip install -r requirements.txt
 
-5. Run the application:
-   
+6. Run the application:
+
        python main.py
 
 Feedback
