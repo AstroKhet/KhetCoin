@@ -347,7 +347,7 @@ class Node:
             task.cancel()
             
         self.peers.discard(peer)
-        self.peer_id_lookup.pop(peer.session_id)
+        self.peer_id_lookup.pop(peer.session_id, None)
         self._updated_peers = 0
         
         log.info(f"[{peer.str_ip}] Peer No. {peer.session_id} disconnected.")
