@@ -131,13 +131,7 @@ class MessageProcessor:
             if is_routable(ip):
                 await save_peer_from_addr(addr)
                 
-        # Relay addresses to 2 other random peers
-        addr_msg = AddrMessage(msg.addresses)
-        self.node.broadcast(
-            message=addr_msg,
-            exclude=peer,
-            sample=2
-        )
+
 
     async def process_getheaders(self, peer: Peer, msg: GetHeadersMessage):
         locator_hashes = msg.locator_hashes
