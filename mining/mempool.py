@@ -40,8 +40,10 @@ class Mempool:
         self._updated_orphans = 0
 
     def add_tx(self, tx: Transaction) -> bool:
-        log.info(f"Attempting to add tx to mempool: <{tx.hash().hex()}>")
-        if get_tx_exists(tx.hash()):
+        tx_hash = tx.hash()
+        log.info(f"Attempting to add tx to mempool: <{tx_hash.hex()}>")
+        
+        if get_tx_exists(tx_hash) or (tx_hash in self._valid_txs.keys()) or (tx_hash in self._orphan_txs.keys()):
             log.info("Tx already exists.")
             return False
         
@@ -55,7 +57,7 @@ class Mempool:
             log.warning(f"Failed to verify tx: ({is_orphan=})")
             return False
         
-        tx_hash = tx.hash()
+        
         if is_orphan:
             self._orphan_txs[tx_hash] = tx
             self._updated_orphans = 0
@@ -95,13 +97,11 @@ class Mempool:
             self.new_mempool_utxos_to_node.discard(utxo)
                     
         for i, tx_out in enumerate(tx.outputs):
-            if tx_out.is_change():
-                script_pk = tx_out.script_pubkey
-                utxo = UTXO(script_pk.get_script_pubkey_receiver(), tx_out.value, tx_hash, i, time_added, script_pk)
-                print(utxo.owner)
-                if utxo.owner == self.node.pk_hash:
-                    print(f"Added {utxo=} to new mempool utxos to node!")
-                    self.new_mempool_utxos_to_node.add(utxo)
+            script_pk = tx_out.script_pubkey
+            owner = script_pk.get_script_pubkey_receiver()
+            if owner == self.node.pk_hash:
+                utxo = UTXO(owner, tx_out.value, tx_hash, i, time_added, script_pk)
+                self.new_mempool_utxos_to_node.add(utxo)
             
             # Check if any outputs satisfy as parents to orphan txs
             outpoint = (tx_hash, i)
@@ -134,8 +134,6 @@ class Mempool:
         for i, tx_in in enumerate(tx.inputs):
             prev_tx_hash = tx_in.prev_tx_hash
             prev_id = tx_in.prev_index
-            
-
             
             # 1. Does prev_tx exist?
             if get_tx_exists(prev_tx_hash):

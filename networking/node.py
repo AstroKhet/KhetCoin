@@ -88,7 +88,7 @@ class Node:
         
     async def shutdown(self):
         log.info(f"External shutdown triggered.")
-        self._shutdown_requested.set()
+        self
 
     async def _start_server(self):
         try:

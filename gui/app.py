@@ -67,8 +67,7 @@ class KhetcoinApp:
 
     def close_node(self):
         """Signals the node to shut down gracefully."""
-
-        asyncio.run_coroutine_threadsafe(self.node.shutdown(), self.node_loop)
+        self.node._shutdown_requested.set()
         log.info("Node shutdown signal sent.")
 
     def _setup_menu(self):
