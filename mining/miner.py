@@ -10,6 +10,7 @@ from blockchain.script import Script
 from blockchain.transaction import Transaction, TransactionInput, TransactionOutput
 from crypto.hashing import HASH256
 
+from db.block import get_block_height_at_hash
 from db.height import get_blockchain_height
 from utils.helper import bytes_to_int, int_to_bytes
 from utils.config import APP_CONFIG
@@ -75,7 +76,8 @@ class Miner:
         # 1. Initial spawning of mining worker processes
         log.info(f'Initiating {self.no_processes} mining processes.')
         
-        height = get_blockchain_height() + 1
+        height = get_block_height_at_hash(candidate_block.prev_block) or 0
+        
         miner_tag = str(APP_CONFIG.get("mining", "tag")).encode("utf-8")
         cmds = [int_to_bytes(height, 8), int_to_bytes(0, 64)]
         if miner_tag:

@@ -63,7 +63,9 @@ class BlockIndex:
 
 def get_block_index(block_hash: bytes):
     with LMDB_ENV.begin(db=INDEX_DB) as db:
-        return BlockIndex.parse(db.get(block_hash))
+        if raw_block := db.get(block_hash):
+            return BlockIndex.parse(raw_block)
+    return None
     
     
 def generate_block_index(block):

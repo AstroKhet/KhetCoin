@@ -285,11 +285,10 @@ class MiningFrame(tk.Frame):
             # Default: Coinbase transaction to miner only.
             total_fee = self.node.mempool.get_total_fee()
             reward = calculate_block_subsidy(get_blockchain_height() + 1) + total_fee
-            output = TransactionOutput(
-                reward,
-                P2PKH_script_pubkey(self.node.pk_hash)
-            )
-            self.node.miner.mine(block, [output])
+            cb_outputs = [
+                TransactionOutput(reward, P2PKH_script_pubkey(self.node.pk_hash))
+            ]
+            self.node.miner.mine(block, cb_outputs)
             
             self._highlight_mempool([tx.hash() for tx in block.get_transactions()])
 
@@ -319,6 +318,10 @@ class MiningFrame(tk.Frame):
         log.info(f"Processing mined block {block.hash().hex()}")
         self._remove_highlights()
         
+        # 0. Verify block guard
+        if not block.verify():
+            messagebox.showerror("Miner Error", "Something wrong happened with the miner")
+            return
         # 1. Save block
         save_block_data(block)
         connect_block(block, self.node)

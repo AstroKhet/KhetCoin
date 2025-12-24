@@ -41,8 +41,11 @@ async def save_peer_from_addr(addr_msg_data: tuple):
     async with aiosqlite.connect(PEERS_SQL) as db:
         await db.execute(
             """
-            INSERT OR IGNORE INTO peers (name, ip, port, added, last_seen, services)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO peers (name, ip, port, added, last_seen, services)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(ip, port) DO UPDATE SET
+                last_seen = excluded.last_seen,
+                services = excluded.services;
             """,
             ("Peer", ip, port, int(time.time()), timestamp, services)
         )

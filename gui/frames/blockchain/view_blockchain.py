@@ -285,7 +285,7 @@ class ViewBlockchainFrame(tk.Frame):
                 truncate_bytes(tx.hash()),
                 from_ if isinstance(from_, str) else truncate_bytes(from_),
                 to if isinstance(to, str) else truncate_bytes(to),
-                f"{sum(tx_out.value for tx_out in tx.outputs)/KTC} KTC",
+                f"{sum(tx_out.value for tx_out in tx.outputs)/KTC:.8f}KTC",
                 f"{tx.fee()/KTC:.8f} KTC"
             )
 
@@ -483,7 +483,7 @@ class ViewBlockchainFrame(tk.Frame):
             "Output Value": f"{sum(tx_out.value for tx_out in tx.outputs)/KTC:.8f}KTC",
             "Size": format_bytes(len(tx.serialize())),
             "Fee": f"{fee} khets",
-            "Fee/B": f"{fee/size:.2f} khets/B",
+            "Fee/KB": f"{fee/size * 1024:.2f} khets/B",
             "Coinbase": "Yes" if tx.is_coinbase() else "No",
             "Locktime": tx.locktime,
         }

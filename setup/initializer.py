@@ -65,6 +65,7 @@ def init_db():
         cur.execute("""
             INSERT INTO peers (name, ip, port, added, last_seen, services) 
             VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(ip, port) DO NOTHING;
         """, ("Khet", "128.106.117.21", 8666, int(time.time()), 0, 1)
         )
         con.commit()
