@@ -2,6 +2,11 @@
 # These are hard coded to support the consensus mechanism of KhetCoin
 # Modifying them WILL exclude you from the blockchain
 
+
+# KhetCoin App version
+KTC_VERSION = "0.1.0"
+"""Version of this current KhetCoin repo"""
+
 # Genesis Block
 GENESIS_HASH = bytes.fromhex(
     "0000000028b0f65d6a5d923f2ba727deda6e65a200fcb81d7236a93868c1f7bf"

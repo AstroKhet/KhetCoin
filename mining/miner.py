@@ -76,7 +76,7 @@ class Miner:
         # 1. Initial spawning of mining worker processes
         log.info(f'Initiating {self.no_processes} mining processes.')
         
-        height = get_block_height_at_hash(candidate_block.prev_block) or 0
+        height = get_block_height_at_hash(candidate_block.prev_block) + 1
         
         miner_tag = str(APP_CONFIG.get("mining", "tag")).encode("utf-8")
         cmds = [int_to_bytes(height, 8), int_to_bytes(0, 64)]

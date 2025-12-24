@@ -201,7 +201,6 @@ class Peer:
     async def close(self):
         if self._closed:
             return
-        self._closed = True
 
         log.info(f"[{self.str_ip}] Closing connection")
 
@@ -216,6 +215,9 @@ class Peer:
             raise
         except Exception as e:
             log.debug(f"[{self.str_ip}] Error during close (ignored): {e}")
+        finally:
+            self.node.remove_peer(self)
+            self._closed = True
         
     def ping(self):
         self.node.spawn(self._ping_task())

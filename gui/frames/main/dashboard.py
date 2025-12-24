@@ -5,6 +5,7 @@ import webbrowser
 from gui.colours import KHET_ORANGE_LIGHT
 from gui.fonts import SansFont
 from gui.helper import add_hover_effect
+from ktc_constants import KTC_VERSION
 from utils.config import APP_CONFIG
 from utils.fmt import format_snake_case
 
@@ -19,17 +20,20 @@ class DashboardFrame(tk.Frame):
         
         self.icon_path = APP_CONFIG.get("path", "assets") / "icons" / "96px"
         
-        self.rowconfigure(1, weight=1)
+        self.rowconfigure(2, weight=1)
         self.columnconfigure(0, weight=1)
 
         # 1. Hello, User!
         label_greeting = tk.Label(self, text=f"Hello, {self.node.name}", font=SansFont(20, weight="bold"))
-        label_greeting.grid(row=0, column=0, sticky="n", pady=(8, 6))
-
+        label_greeting.grid(row=0, column=0, sticky="n", pady=(8, 0))
+        
+        # 1.1 Version
+        label_version = tk.Label(self, text=f"KhetCoin v{KTC_VERSION}", font=SansFont(9), fg="gray")
+        label_version.grid(row=1, column=0, sticky="n", pady=(0, 6))
 
         # 2. Main dashboard menu
         frame_center_container = tk.Frame(self)
-        frame_center_container.grid(row=1, column=0, sticky="nsew")
+        frame_center_container.grid(row=2, column=0, sticky="nsew")
 
         # 2.1 Centering the menu in the middle
         frame_center_container.columnconfigure(0, weight=1)  # left expander
@@ -65,7 +69,7 @@ class DashboardFrame(tk.Frame):
         feedback_cmd = lambda: webbrowser.open("https://forms.gle/n9WrY7BvTkek2S1i9")
         self._put_button(idx+1, "feedback", feedback_cmd)
         
-        guide_cmd = lambda: webbrowser.open("https://youtu.be/UnktCDi-BVs?si=fVG-LeBJb8WPAmoT")
+        guide_cmd = lambda: webbrowser.open("https://docs.google.com/document/d/1ADRmDofa2dM5rW36-aAL2re6DPIrsnATmU68HgwWk7s/edit?usp=sharing")
         self._put_button(idx+2, "guide", guide_cmd)
         
         github_cmd = lambda: webbrowser.open("https://github.com/AstroKhet/Khetcoin")

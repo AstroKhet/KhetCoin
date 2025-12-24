@@ -8,7 +8,7 @@ from tkinter import messagebox
 from blockchain.block import Block, calculate_block_subsidy
 from blockchain.script import P2PKH_script_pubkey
 from blockchain.transaction import Transaction, TransactionOutput
-from db.block import calculate_block_target
+from db.block import calculate_block_target, get_block_height_at_hash
 from db.functions import connect_block, save_block_data
 from db.height import get_blockchain_height
 from gui.colours import BTN_NEUTRAL_BLUE, BTN_STOP_RED
@@ -298,7 +298,7 @@ class MiningFrame(tk.Frame):
     def _generate_candidate_block(self) -> Block | None:
         tip_index = self.node.block_tip_index
         txs = self.node.mempool.get_all_valid_tx(explicit_sort=True)
-        height = tip_index.height + 1
+        height = get_block_height_at_hash(tip_index.hash) + 1
         try:
             block = Block(
                 version=1,
@@ -331,7 +331,7 @@ class MiningFrame(tk.Frame):
         inv_msg = InvMessage(inventory)
         self.node.broadcast(inv_msg)
         if self.var_notification.get():
-            messagebox.showinfo("Block mined", f"Your have mined block no. {get_blockchain_height()}")
+            messagebox.showinfo("Block mined", f"Your have mined block no. {block.get_height()}")
         
         
     def _scale_cpu_cores(self, *_):
