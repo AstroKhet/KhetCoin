@@ -25,13 +25,6 @@ class Header:
         self.timestamp: int = timestamp
         self.bits: bytes = bits
         self.nonce: int = nonce
-        
-        self._serialize_cache = None
-        
-    def __setattr__(self, name, value) -> None:
-        if name != "_serialize_cache":
-            self._serialize_cache = None
-        super().__setattr__(name, value)
     
     def __str__(self) -> str:
         result = f"Block: {self.hash().hex()}\n"
@@ -59,9 +52,6 @@ class Header:
         return header
     
     def serialize(self) -> bytes:
-        if self._serialize_cache:
-            return self._serialize_cache
-
         result: bytes = int_to_bytes(self.version)
         result += self.prev_block
         result += self.merkle_root
@@ -69,12 +59,10 @@ class Header:
         result += self.bits
         result += int_to_bytes(self.nonce)
 
-        self._serialize_cache = result
         return result
     
     def set_merkle_root(self, root):
         self.merkle_root = root
-        self._serialize_cache = None
 
     def hash(self) -> bytes:
         return HASH256(self.serialize())
