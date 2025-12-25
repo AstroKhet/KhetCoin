@@ -79,7 +79,7 @@ def append_tx_history(block: Block, pk_hash: bytes):
                 else:
                     value = tx_hash + int_to_bytes(0, 8) + int_to_bytes(spent, 8) + int_to_bytes(received, 8)
 
-                    db.put(int_to_bytes(block_index.height, 8), value)
+                db.put(int_to_bytes(block_index.height, 8), value)
         
         
 def delete_tx_history(height: int):
