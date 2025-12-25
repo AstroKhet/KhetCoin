@@ -16,14 +16,6 @@
             "display": true,
             "configurable": true
         },
-        "copy_popup": {
-            "value": false,
-            "type": "bool",
-            "description": "Alerts the user when something is copied to clipboard.",
-            "unit": null,
-            "display": true,
-            "configurable": true
-        },
         "initial_setup": {
             "value": false,
             "type": "bool",
@@ -182,32 +174,6 @@
             "value": "Segoe UI",
             "type": "str",
             "description": "",
-            "unit": null,
-            "display": false,
-            "configurable": false
-        }
-    },
-    "links": {
-        "feedback": {
-            "value": "https://forms.gle/n9WrY7BvTkek2S1i9",
-            "type": "str",
-            "description": "Link to feedback form",
-            "unit": null,
-            "display": false,
-            "configurable": false
-        },
-        "guide": {
-            "value": "https://youtu.be/UnktCDi-BVs?si=fVG-LeBJb8WPAmoT",
-            "type": "str",
-            "description": "Link to KhetCoin Guide",
-            "unit": null,
-            "display": false,
-            "configurable": false
-        },
-        "github": {
-            "value": "https://github.com/AstroKhet/KhetCoin",
-            "type": "str",
-            "description": "Link to GitHub repository",
             "unit": null,
             "display": false,
             "configurable": false
