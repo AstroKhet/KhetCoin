@@ -171,6 +171,7 @@ class MiningFrame(tk.Frame):
         
         # 3. Initial setup
         self._selected_tx: Transaction | None = None
+        self._last_mined_block_hash: bytes = self.node.block_tip_index.hash
         
         # This is different from Miner.is_mining; self._mining just means the button was pressed and will mine whenever mining conditions are reached.
         self._mining = False  
@@ -269,7 +270,7 @@ class MiningFrame(tk.Frame):
             if self.node.mempool.get_total_fee() >= min_total_fee:
                 self._start_miner()
                 self._mining_start_t = time.monotonic()
-                self.label_mining_status.config(text=f"Mining... (0s)")
+                self.label_mining_status.config(text=f"Mining... ({format_age(0)})")
         
         # 3. If miner is active, update GUI for mining duration
         else:
@@ -278,6 +279,7 @@ class MiningFrame(tk.Frame):
 
     def _start_miner(self):
         """Creates coinbase transactions and activates miner"""
+        log.info("Start Miner clicked.")
         if self.node.miner.stop_flag.value == 0:
             return
         
@@ -291,7 +293,6 @@ class MiningFrame(tk.Frame):
             self.node.miner.mine(block, cb_outputs)
             
             self._highlight_mempool([tx.hash() for tx in block.get_transactions()])
-
         else:
             messagebox.showerror("Error", "Something went wrong when generating a candidate block for mining :(")
         
@@ -315,16 +316,19 @@ class MiningFrame(tk.Frame):
         return block
         
     def _process_mined_block(self, block: Block):
-        log.info(f"Processing mined block {block.hash().hex()}")
+        log.info(f"Processing mined block {block}")
         self._remove_highlights()
         
         # 0. Verify block guard
         if not block.verify():
             messagebox.showerror("Miner Error", "Something wrong happened with the miner")
             return
+        
         # 1. Save block
         save_block_data(block)
         connect_block(block, self.node)
+        
+        self._last_mined_block_hash = block.hash()
  
         # 2. Broadcast block
         inventory = [(BLOCK_TYPE, block.hash())]
@@ -387,6 +391,12 @@ class MiningFrame(tk.Frame):
         
         # Allow mining in background
         if self._mining:
+            if self.node.check_updated_blockchain(_frame_id):  # Restart mining if someone else propagates a new valid block that extends the active chain
+                if self.node.block_tip_index.hash != self._last_mined_block_hash:
+                    log.info(f"Miner restarted as new block {self.node.block_tip_index.hash} set as block tip.")
+                    self.node.miner.shutdown()
+                    self._start_miner()
+                
             self._poll_miner()
             
         self.after(500, self._update)

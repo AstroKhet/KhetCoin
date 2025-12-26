@@ -77,6 +77,7 @@ class Miner:
         log.info(f'Initiating {self.no_processes} mining processes.')
         
         height = get_block_height_at_hash(candidate_block.prev_block) + 1
+        log.info(f"Mining block height {height}")
         
         miner_tag = str(APP_CONFIG.get("mining", "tag")).encode("utf-8")
         cmds = [int_to_bytes(height, 8), int_to_bytes(0, 64)]
@@ -127,6 +128,8 @@ class Miner:
                 candidate_block.set_coinbase_tx(cb_tx)
                 candidate_block.set_nonce(nonce)
                 
+                log.info("Supposed mined block: ", candidate_block)
+                
                 self.mined_block = candidate_block
             elif status == 2: # No result
                 pass
@@ -174,7 +177,16 @@ class Miner:
             self._recent_hash_rates.pop(0)
             
 
-        
+                #  args=(self.result_queue, 
+                #       header.copy(),
+                #       candidate_block.merkle_tree.copy(), 
+                #       cb_tx.copy(), 
+                #       i, 
+                #       self.no_processes, 
+                #       candidate_block.target,
+                #       height, 
+                #       miner_tag,
+                #       self.stop_flag       
 
 def miner(
     queue: Queue, 
@@ -227,6 +239,9 @@ def miner(
                 if v < target:
                     if hash_count > 0:
                         queue.put((0, hash_count))
+                    
+                    log.info("Supposedly mined header:", header.serialize().hex())
+                    log.info("And its hash:", h.hex())
                     queue.put((1, (sig_nonce, nonce)))
             
         # No success
