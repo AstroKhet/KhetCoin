@@ -9,43 +9,48 @@ Installation
 
 Before you begin, ensure that Git is installed on your system.
 If Git is not installed, download and install it from:
-
-    https://git-scm.com/downloads
-
+```
+https://git-scm.com/downloads
+```
 You can verify the installation by running:
-
-    git --version
-
+```
+git --version
+```
 Installation Steps
 
 1. Clone this repository:
 
-       git clone https://github.com/AstroKhet/Khetcoin.git
+```
+git clone https://github.com/AstroKhet/Khetcoin.git
+```
 
 2. Change into the project directory:
 
-       cd KhetCoin
-
+```
+cd KhetCoin
+```
 3. Create a virtual environment in the project folder:
-
-       python -m venv .venv
-
+```
+python -m venv .venv
+```
 4. Activate the virtual environment:
 
    Windows:
-       .venv\\Scripts\\activate
-
+   ```
+    .venv\\Scripts\\activate
+   ```
    macOS / Linux:
-       source .venv/bin/activate
-
-5. Install dependencies:
-
-       pip install -r requirements.txt
-
-6. Run the application:
-
-       python main.py
-
+   ```
+   source .venv/bin/activate
+    ```
+6. Install dependencies:
+```
+pip install -r requirements.txt
+```
+7. Run the application:
+```
+python main.py
+```
 
 Guide
 -----
