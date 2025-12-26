@@ -128,7 +128,7 @@ class Miner:
                 candidate_block.set_coinbase_tx(cb_tx)
                 candidate_block.set_nonce(nonce)
                 
-                log.info("Supposed mined block: ", candidate_block)
+                log.info(f"Supposed mined block: {str(candidate_block)}")
                 
                 self.mined_block = candidate_block
             elif status == 2: # No result
