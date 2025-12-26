@@ -7,6 +7,17 @@ the basics of a blockchain without spending any money.
 Installation
 ------------
 
+Before you begin, ensure that Git is installed on your system.
+If Git is not installed, download and install it from:
+
+    https://git-scm.com/downloads
+
+You can verify the installation by running:
+
+    git --version
+
+Installation Steps
+
 1. Clone this repository:
 
        git clone https://github.com/AstroKhet/Khetcoin.git
@@ -20,12 +31,12 @@ Installation
        python -m venv .venv
 
 4. Activate the virtual environment:
-   - Windows:
 
-         .venv\\Scripts\\activate
-   - Mac/Linux:
+   Windows:
+       .venv\\Scripts\\activate
 
-         source .venv/bin/activate
+   macOS / Linux:
+       source .venv/bin/activate
 
 5. Install dependencies:
 
@@ -35,9 +46,15 @@ Installation
 
        python main.py
 
+
+Guide
+-----
+
+To get started, you can view this quick 
+[guide](https://docs.google.com/document/d/1ADRmDofa2dM5rW36-aAL2re6DPIrsnATmU68HgwWk7s/edit?usp=sharing).
+
 Feedback
 --------
 
-For bug reports and feedback, please visit:
-
-https://forms.gle/n9WrY7BvTkek2S1i9
+For bug reports and feedback, please use this
+[form](https://forms.gle/n9WrY7BvTkek2S1i9)
