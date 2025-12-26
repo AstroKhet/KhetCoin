@@ -32,13 +32,6 @@ def save_private_key(priv_key: bytes | PrivateKey, name: str = "") -> None:
     if len(priv_key_bytes) != 32:
         raise ValueError("Private Key must be 32 bytes long")
 
-    if name == "":
-        raise ValueError("Name cannot be empty!")
-
-    # Check if name contains only letters and numbers
-    if not re.match(r"^[\w\s]+$", name):
-        raise ValueError("Name must contain only letters and numbers.")
-
     # Check if the name already exists
     priv_key_path = KEYS_DIR / f"{name}.dat"
     if priv_key_path.exists():
