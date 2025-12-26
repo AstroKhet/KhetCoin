@@ -43,11 +43,11 @@ python -m venv .venv
    ```
    source .venv/bin/activate
     ```
-6. Install dependencies:
+5. Install dependencies:
 ```
 pip install -r requirements.txt
 ```
-7. Run the application:
+6. Run the application:
 ```
 python main.py
 ```
