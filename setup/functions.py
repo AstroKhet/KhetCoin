@@ -29,12 +29,9 @@ def run_initial_setup() -> None:
     Perform initial setup if it has not already been done.
     Sets up folders, database, fonts, and runs SetupApp.
     """
-    
-        return
-
     try:
         from setup.setup import SetupApp
-        from setup.initializer import init_db, init_folders, init_font
+        from setup.initializer import init_folders
 
         init_folders()
         setup_app = SetupApp()
