@@ -158,7 +158,6 @@ class Miner:
 
         for proc in self._mine_processes:
             proc.join()
-        self._miner_thread.join()
         
         self._mine_processes = [] 
         self._recent_hash_rates = []

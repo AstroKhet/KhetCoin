@@ -55,21 +55,22 @@ class KeyGenerator:
 
         # Blocks until a key is found OR shutdown is called
         status, key_found = result_queue.get() 
-    
+
         if status == 0:
             return    
         elif status == 1: # Key found
             self.private_key = key_found
             self.shutdown()
-            
+           
     def shutdown(self):
         with self.stop_flag.get_lock():
             self.stop_flag.value = 1
         
         for proc in self._gen_processes:
             proc.join()
+            
         self._gen_processes = []
-
+        
 
 def key_generator(prefix, queue, v_stop_flag):
     while not v_stop_flag.value:
@@ -82,7 +83,7 @@ def key_generator(prefix, queue, v_stop_flag):
             except:
                 pass
             return
-    
+
     queue.put_nowait((0, None))
         
                 
