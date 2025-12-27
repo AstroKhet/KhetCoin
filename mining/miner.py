@@ -162,7 +162,6 @@ class Miner:
         self._mine_processes = [] 
         self._recent_hash_rates = []
         self._mine_end_time = time.time()
-        self.mined_block = None
         
     
     def get_hashrate(self) -> float:
