@@ -209,7 +209,7 @@ class SetupApp():
             )
             return
 
-        self.root.after(500, self._update_show_addr)
+        self.root.after(250, self._update_show_addr)
     
     def _close(self):
         # Close all waiting variables

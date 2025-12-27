@@ -55,16 +55,14 @@ class KeyGenerator:
 
         # Blocks until a key is found OR shutdown is called
         status, key_found = result_queue.get() 
-        
+    
         if status == 0:
-            return
-        
+            return    
         elif status == 1: # Key found
             self.private_key = key_found
             self.shutdown()
             
     def shutdown(self):
-        self.private_key = None
         with self.stop_flag.get_lock():
             self.stop_flag.value = 1
         
