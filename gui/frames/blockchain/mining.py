@@ -231,6 +231,7 @@ class MiningFrame(tk.Frame):
     
     def _toggle_mining_switch(self):
         if self._mining:  # Turn OFFF
+            log.info("Stop Miner clicked.")
             if self.node.miner.stop_flag.value == 0:
                 self.node.miner.shutdown()
             
@@ -241,6 +242,7 @@ class MiningFrame(tk.Frame):
             self.btn_mining.config(text="Start Mining", bg="#9dbcd4")
             self._remove_highlights()
         else:  # Turn ON
+            log.info("Start Miner clicked.")
             self.label_mining_status.config(text="(Waiting for mempool to hit min fee...)")
             self.scale_mining_power.config(state="disabled")
             self.sb_min_total_fee.config(state="disabled")
@@ -279,8 +281,7 @@ class MiningFrame(tk.Frame):
 
     def _start_miner(self):
         """Creates coinbase transactions and activates miner"""
-        log.info("Start Miner clicked.")
-        if self.node.miner.stop_flag.value == 0:
+        if self.node.miner.stop_flag.value == 0:   # already mining
             return
         
         if block := self._generate_candidate_block():
@@ -394,6 +395,7 @@ class MiningFrame(tk.Frame):
             if self.node.check_updated_blockchain(_frame_id):  # Restart mining if someone else propagates a new valid block that extends the active chain
                 if self.node.block_tip_index.hash != self._last_mined_block_hash:
                     log.info(f"Miner restarted as new block {self.node.block_tip_index.hash} set as block tip.")
+                    log.info("miner shutdown called from mining frame _update")
                     self.node.miner.shutdown()
                     self._start_miner()
                 

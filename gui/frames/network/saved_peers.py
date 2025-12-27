@@ -40,7 +40,7 @@ class SavedPeersFrame(tk.Frame):
         tk.Label(self.frame_sort, text="Sort By:").pack(side="left", padx=(0, 5))
         
         self.sort_by_var = tk.StringVar(value="Name")
-        self.om_sort_by = ttk.OptionMenu(self.frame_sort, self.sort_by_var, "Name", "Name", "Added", command=self._sort_addrs)
+        self.om_sort_by = ttk.OptionMenu(self.frame_sort, self.sort_by_var, "Name", "Name", "Added", "Last Seen", command=self._sort_addrs)
         self.om_sort_by.pack(side="left", padx=5)
         
         self.sort_order_var = tk.StringVar(value="Ascending")
@@ -52,10 +52,11 @@ class SavedPeersFrame(tk.Frame):
         
         # 2. Wallet Addresses Treeview
         peer_cols = {
-            "name": ("Name", 100),
-            "ip": ("IP Address", 100),
-            "port": ("Network Port", 50),
-            "added": ("Added", 100)
+            "name": ("Name", 10),
+            "ip": ("IP Address", 10),
+            "port": ("Network Port", 5),
+            "last_seen": ("Last Seen", 10),
+            "added": ("Added", 10)
         }
         
         self.lf_peers = ttk.LabelFrame(self.frame_main, text="Saved Addresses", padding="5")
@@ -111,11 +112,12 @@ class SavedPeersFrame(tk.Frame):
         self._is_active = False
         
     def on_show(self):
+        self.peers = self._load_peers()
         self._is_active = True
         self._update()
 
     def _load_peers(self):
-        # Should only run once upon the first time loading this frame.
+        # Synchronous code for loading peers
         with sqlite3.connect(PEERS_SQL) as con:
             cur = con.cursor()
             cur.execute("SELECT * FROM peers")
@@ -125,7 +127,8 @@ class SavedPeersFrame(tk.Frame):
                     "name": row[1],
                     "ip": row[2],
                     "port": row[3],
-                    "added": row[4]
+                    "added": row[4],
+                    "last_seen": row[5]
                 } 
             for row in rows}
         
@@ -136,15 +139,18 @@ class SavedPeersFrame(tk.Frame):
         sort_by = self.sort_by_var.get()
         reverse = self.sort_order_var.get() == "Descending"
         if sort_by == "Name":
-            sorted_addr = dict(sorted(self.peers.items(), key=lambda item: item[1]["name"], reverse=reverse))
-        else:  # Maybe there can be more sorting options in the future
-            sorted_addr = self.peers  
+            sorted_peers = dict(sorted(self.peers.items(), key=lambda item: item[1]["name"], reverse=reverse))
+        elif sort_by == "Last Seen":
+            sorted_peers = dict(sorted(self.peers.items(), key=lambda item: item[1]["last_seen"], reverse=reverse))
+        else:
+            sorted_peers = dict(sorted(self.peers.items(), key=lambda item: item[1]["added"], reverse=reverse))
             
-        for iid, info in sorted_addr.items():
+        for iid, info in sorted_peers.items():
             values = (
                 info["name"],
                 info["ip"],
                 info["port"],
+                (format_age(int(time.time()) - info["last_seen"]) + " ago") if info["last_seen"] else "Never",
                 format_age(int(time.time()) - info["added"]) + " ago"
             )
             
@@ -317,6 +323,7 @@ class SavedPeersFrame(tk.Frame):
                 "name": name,
                 "ip": ip,
                 "port": port,
+                "last_seen": 0,
                 "added": added
             }
             

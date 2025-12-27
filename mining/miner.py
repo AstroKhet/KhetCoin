@@ -39,7 +39,6 @@ class Miner:
         self.nonce = Value('I', 0)
         self.sig_nonce = Value('Q', 0)
         
-        self.result_queue = Queue()
         self._mine_processes: list[Process] = []
         
         # Mining variables
@@ -74,10 +73,10 @@ class Miner:
         
     def _initiate_miners(self, candidate_block: Block, cb_outputs: list[TransactionOutput]) -> Block | None:
         # 1. Initial spawning of mining worker processes
-        log.info(f'Initiating {self.no_processes} mining processes.')
+        log.info(f"Initiating {self.no_processes} mining processes...")
         
         height = get_block_height_at_hash(candidate_block.prev_block) + 1
-        log.info(f"Mining block height {height}")
+        log.info(f"Attempting to mine at block {height=}")
         
         miner_tag = str(APP_CONFIG.get("mining", "tag")).encode("utf-8")
         cmds = [int_to_bytes(height, 8), int_to_bytes(0, 64)]
@@ -89,10 +88,12 @@ class Miner:
         header = candidate_block.header
         candidate_block.set_coinbase_tx(cb_tx)
         
+        result_queue = Queue()  # Dedicated queue for each thread
+        
         for i in range(self.no_processes):
             proc = Process(
                 target=miner,
-                args=(self.result_queue, 
+                args=(result_queue, 
                       header.copy(),
                       candidate_block.merkle_tree.copy(), 
                       cb_tx.copy(), 
@@ -111,28 +112,31 @@ class Miner:
         self._last_hash_report = time.time()
 
         while not self.stop_flag.value:
-            status, value = self.result_queue.get()
+            status, value = result_queue.get()
             
             if status == 0:
-                # Hash counter
-                self._hash_counter += value
-                self._total_hashes += value
-                self._report_counter += 1
+                # Shutdown
+                break
+            
             elif status == 1:  # !!! Found nonce !!!
                 self.shutdown()
                 
                 sig_nonce, nonce = value
-                script_sig = Script([int_to_bytes(height, 8), int_to_bytes(sig_nonce, 64), miner_tag])
+                cmds = [int_to_bytes(height, 8), int_to_bytes(sig_nonce, 64)]
+                if miner_tag:
+                    cmds.append(miner_tag)
+                script_sig = Script(cmds)
                 cb_tx = build_coinbase_tx(script_sig=script_sig, outputs=cb_outputs)
 
                 candidate_block.set_coinbase_tx(cb_tx)
                 candidate_block.set_nonce(nonce)
-                
-                log.info(f"Supposed mined block: {str(candidate_block)}")
-                
                 self.mined_block = candidate_block
-            elif status == 2: # No result
-                pass
+                break
+            
+            elif status == 2: # Hash counter
+                self._hash_counter += value
+                self._total_hashes += value
+                self._report_counter += 1
             
             # Moderate batch_size ever 0.5s
             now = time.time()
@@ -143,16 +147,14 @@ class Miner:
 
                 self._record_hash_rate(hash_rate)
 
+        log.info(f"Miner thread for {height=} finished.")
+        return
         
         
     def shutdown(self):
-        log.info("Miner shutdown initiated.")
         with self.stop_flag.get_lock():
             self.stop_flag.value = 1
-        
-        for proc in self._mine_processes:
-            proc.terminate()
-        log.info("All miner processes terminated.")
+        log.info("Miner stop flag set.")
 
         self._mine_processes = [] 
         self._recent_hash_rates = []
@@ -177,17 +179,6 @@ class Miner:
             self._recent_hash_rates.pop(0)
             
 
-                #  args=(self.result_queue, 
-                #       header.copy(),
-                #       candidate_block.merkle_tree.copy(), 
-                #       cb_tx.copy(), 
-                #       i, 
-                #       self.no_processes, 
-                #       candidate_block.target,
-                #       height, 
-                #       miner_tag,
-                #       self.stop_flag       
-
 def miner(
     queue: Queue, 
     header: Header,
@@ -200,7 +191,9 @@ def miner(
     miner_tag: bytes,
     v_stop_flag
     ):
-    """Worker function for block mining. Designed for standard coinbase transactions only (see `build_coinbase_tx`)"""
+    """Worker function for block mining. Designed for standard coinbase transactions only (see `build_coinbase_tx`)
+    Queue statuses:
+    """
     hash_count = 0
 
     batch = 1000
@@ -220,42 +213,39 @@ def miner(
 
             for nonce in range(start_nonce, 1 << 32, step):
                 raw_header = partial_head + int_to_bytes(nonce)
-                h = HASH256(raw_header)
-                v = bytes_to_int(h)
+                raw_header_hash = HASH256(raw_header)
                 
                 hash_count += 1
                 if hash_count >= batch:
                     if v_stop_flag.value:
+                        try:
+                            queue.put_nowait((0, None))  
+                        except:
+                            pass
                         return
                     
                     now = time.perf_counter_ns()
                     t_elapsed_ns = max(now - last_report, 1)
                     batch = round(batch * (5e8/t_elapsed_ns))  # report every 0.5s
                     
-                    queue.put((0, hash_count))
+                    queue.put((2, hash_count))
                     hash_count = 0
                     last_report = time.perf_counter_ns()
                     
-                if v < target:
+                if bytes_to_int(raw_header_hash) < target:
                     if hash_count > 0:
-                        queue.put((0, hash_count))
-                    
-                    log.info("Supposedly mined header:", header.serialize().hex())
-                    log.info("And its hash:", h.hex())
+                        queue.put((2, hash_count))
                     queue.put((1, (sig_nonce, nonce)))
             
         # No success
         if hash_count > 0:
-            queue.put((0, hash_count))
+            queue.put((2, hash_count))
             
     except KeyboardInterrupt:  # To prevent KeyboardInterrupt errors from hashlib to flood the terminal
         return
-
     except Exception as e:
         log.error(f"Error mining: {e}")
             
-
-
 
 def build_coinbase_tx(script_sig: Script, outputs: list[TransactionOutput]) -> Transaction:
     """Standard Coinbase Transaction constructor, whereby scriptSig is <Height 8B> <nonce 64B> <tag ?B>"""

@@ -27,7 +27,7 @@ class Header:
         self.nonce: int = nonce
     
     def __str__(self) -> str:
-        result = f"Block: {self.hash().hex()}\n"
+        result = f"Block Hash: {self.hash().hex()}\n"
         result += f"Version {self.version}\n"
         result += f"Previous Block: {self.prev_block.hex()}\n"
         result += f"Merkle Root: {self.merkle_root.hex()}\n"
