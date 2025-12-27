@@ -19,14 +19,12 @@ def launch_app() -> None:
 
 
 def main():
-    try:
+    if not APP_CONFIG.get("app", "initial_setup"):
         run_initial_setup()
-    except Exception as e:
-        print(f"Setup Error {e}")
-        return
-
-    configure_logging()
-    launch_app()
+        
+    if APP_CONFIG.get("app", "initial_setup"):
+        configure_logging()
+        launch_app()
 
 
 if __name__ == "__main__":

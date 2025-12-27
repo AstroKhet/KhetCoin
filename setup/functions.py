@@ -29,7 +29,7 @@ def run_initial_setup() -> None:
     Perform initial setup if it has not already been done.
     Sets up folders, database, fonts, and runs SetupApp.
     """
-    if APP_CONFIG.get("app", "initial_setup"):
+    
         return
 
     try:
@@ -39,10 +39,6 @@ def run_initial_setup() -> None:
         init_folders()
         setup_app = SetupApp()
         setup_app.main()
-        init_db()
-        init_font()
-
-        APP_CONFIG.set("app", "initial_setup", True)
 
     except Exception as e:
         print(f"Initial setup failed {e}")

@@ -1,7 +1,9 @@
-from multiprocessing import Process, Value, cpu_count
+
+from multiprocessing import Process, Queue, Value, cpu_count
 from ctypes import c_ubyte
 import os
 import threading
+import time
 
 from crypto.key import private_key_to_wif
 
@@ -38,44 +40,53 @@ class KeyGenerator:
         self._gen_thread.start()
         
     def _initiate_generators(self, prefix):
+        result_queue = Queue() 
+        
+        with self.v_private_key.get_lock():
+            for i in range(32): self.v_private_key[i] = 0
+
         for _ in range(self.no_processes):
             proc = Process(
                 target=key_generator,
-                args=(prefix, self.v_private_key, self.stop_flag)
+                args=(prefix, result_queue, self.stop_flag) # Pass the queue
             )
             proc.start()
             self._gen_processes.append(proc)
-    
+
+        # Blocks until a key is found OR shutdown is called
+        status, key_found = result_queue.get() 
         
-        while not self.stop_flag.value:
-            continue
+        if status == 0:
+            return
         
-        if bytes(self.v_private_key[:]) != bytes(32):
+        elif status == 1: # Key found
+            self.private_key = key_found
             self.shutdown()
-            self.private_key = bytes(self.v_private_key[:])
-    
+            
     def shutdown(self):
         self.private_key = None
         with self.stop_flag.get_lock():
             self.stop_flag.value = 1
         
         for proc in self._gen_processes:
-            proc.terminate()
-            
-def key_generator(prefix, v_private_key_raw, v_stop_flag):
-    
-    while True:
-        if v_stop_flag.value:
-            return
-        
+            proc.join()
+        self._gen_processes = []
+
+
+def key_generator(prefix, queue, v_stop_flag):
+    while not v_stop_flag.value:
         priv_key_bytes = os.urandom(32)
         wif = private_key_to_wif(priv_key_bytes)
 
         if wif[1:].startswith(prefix):
-            with v_private_key_raw.get_lock():
-                v_private_key_raw[:] = priv_key_bytes
-            with v_stop_flag.get_lock():
-                v_stop_flag.value = 1
+            try:
+                queue.put_nowait((1, priv_key_bytes))
+            except:
+                pass
+            return
+    
+    queue.put_nowait((0, None))
+        
                 
         
     

@@ -156,6 +156,10 @@ class Miner:
             self.stop_flag.value = 1
         log.info("Miner stop flag set.")
 
+        for proc in self._mine_processes:
+            proc.join()
+        self._miner_thread.join()
+        
         self._mine_processes = [] 
         self._recent_hash_rates = []
         self._mine_end_time = time.time()

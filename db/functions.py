@@ -65,7 +65,6 @@ def connect_block(block: Block, node):
     node.mempool.revalidate_mempool()
     
     # 3. Save to HEIGHT_DB
-    print("HEIGHT", block_index.height)
     save_height(block_index.height, block.hash())
     
     # 4. Save to TX_HISTORY_DB

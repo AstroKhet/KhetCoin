@@ -7,6 +7,7 @@ from crypto.key import private_key_to_wif, save_private_key
 from crypto.keygen import KeyGenerator
 from gui.helper import reset_widget
 from gui.vcmd import register_VCMD_filename, register_VCMD_wif_prefix
+from setup.initializer import init_db, init_font
 from utils.config import APP_CONFIG
     
 class SetupApp():
@@ -144,6 +145,10 @@ class SetupApp():
             save_private_key(self.priv_key, self.name)
             APP_CONFIG.set("app", "name", self.name)
             APP_CONFIG.set("mining", "tag", f"/{self.name}/")
+            init_db()
+            init_font()
+            APP_CONFIG.set("app", "initial_setup", True)
+            
             self._close()
             
         btn_save = ttk.Button(btn_frame, text="Confirm", command=save)
