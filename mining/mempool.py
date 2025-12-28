@@ -47,12 +47,12 @@ class Mempool:
             log.info("Tx already exists.")
             return False
         
-        tx_in_status = self.get_mempool_eligibility(tx)
-        if "invalid" in tx_in_status:
+        tx_in_statuses = self.get_mempool_eligibility(tx)
+        if "invalid" in tx_in_statuses:
             log.info("Invalid Tx.")
             return False
         
-        is_orphan = "orphan" in tx_in_status
+        is_orphan = "orphan" in tx_in_statuses
         if not tx.verify(allow_orphan=is_orphan):
             log.warning(f"Failed to verify tx: ({is_orphan=})")
             return False
@@ -82,7 +82,7 @@ class Mempool:
         self._time_log[tx_hash] = time_added
         
         for i, tx_in in enumerate(tx.inputs):
-            status = tx_in_status[i]
+            status = tx_in_statuses[i]
             outpoint = (tx_in.prev_tx_hash, tx_in.prev_index)
     
             if status == "orphan":
@@ -203,7 +203,7 @@ class Mempool:
                     tx_in_statuses.append("orphan")
                     continue
 
-        return status
+        return tx_in_statuses
 
     def get_valid_tx(self, tx_hash: bytes) -> Transaction | None:
         return self._valid_txs.get(tx_hash, None)

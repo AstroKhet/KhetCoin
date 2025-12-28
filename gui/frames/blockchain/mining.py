@@ -313,7 +313,6 @@ class MiningFrame(tk.Frame):
         return block
         
     def _process_mined_block(self, block: Block):
-        log.info(f"Processing mined block {block}")
         self._remove_highlights()
         
         # 0. Verify block guard
