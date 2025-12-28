@@ -2,6 +2,8 @@
 from datetime import datetime
 import math
 
+from networking.constants import _SVC_FULL, _SVC_BETA
+
 
 def print_compare_bytes(stuff1: bytes, stuff2: bytes) -> None:
     RESET = "\033[0m"
@@ -134,3 +136,14 @@ def format_snake_case(text, all_words=True):
         return " ".join(w[0].upper() + w[1:] for w in words)
     else:
         return " ".join(words).capitalize()
+    
+
+def services_to_str(services: bytes):
+    svcs = []
+    if services & _SVC_BETA:
+        svcs.append("NODE_BETA")
+    
+    if services & _SVC_FULL:
+        svcs.append("NODE_FULL")
+        
+    return ", ".join(svcs)

@@ -11,7 +11,7 @@ class TxMessage:
             self.tx = self.payload = tx
 
     def __str__(self):
-        return f"[tx]\n{self.tx}"
+        return f"[tx]\n{self.tx.hex()}"
 
     @classmethod
     def parse(cls, stream: BinaryIO):

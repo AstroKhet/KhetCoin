@@ -13,7 +13,7 @@ from gui.helper import center_popup
 from networking.node import Node
 
 from utils.config import APP_CONFIG
-from utils.fmt import format_age, format_bytes
+from utils.fmt import format_age, format_bytes, services_to_str
 
 log = logging.getLogger(__name__)
 PEERS_SQL = APP_CONFIG.get("path", "peers")
@@ -187,7 +187,7 @@ class ManagePeersFrame(tk.Frame):
             "Peer ID": peer.session_id,
             "Address": peer.str_ip,
             "User Agent": peer.user_agent.decode(),
-            "Services": f"{peer.services}",
+            "Services": services_to_str(peer.services),
             "Version": peer.version,
             "Transaction Relay": "Yes" if peer.relay else "No",
             "Current Block": peer.height,

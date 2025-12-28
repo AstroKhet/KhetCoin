@@ -1,4 +1,5 @@
 from typing import BinaryIO, List
+from utils.fmt import services_to_str
 from utils.helper import encode_ip, format_ip, int_to_bytes, bytes_to_int, read_varint
 
 
@@ -21,7 +22,7 @@ class AddrMessage:
         for i, (timestamp, services, ip, port) in enumerate(self.addresses):
             lines.append(f"  Address {i}:")
             lines.append(f"    Timestamp: {timestamp}")
-            lines.append(f"    Services:  {hex(services)}")
+            lines.append(f"    Services:  {services_to_str(services)}")
             lines.append(f"    IP:        {format_ip(ip)}")
             lines.append(f"    Port:      {port}")
         return "\n".join(lines)

@@ -8,7 +8,10 @@ NETWORK_MAGIC = "BITE".encode()  # 42 49 54 45
 NETWORK_PORT = 8666
 
 PROTOCOL_VERSION = 201  # Current Khetcoin protocol version
-SERVICES = 0  # No additional services
+
+_SVC_FULL = 0x01  # Full node
+_SVC_BETA = 0x08  # Beta node (Khetcoin v0.x.x)
+SERVICES = _SVC_FULL | _SVC_BETA
 
 USER_AGENT = b"/Khetcoin:0.1/"
 ####################################

@@ -2,9 +2,10 @@ import tkinter as tk
 from datetime import timedelta
 from tkinter import messagebox
 from gui.colours import BTN_CONFIG_GRAY, BTN_START_GREEN, BTN_STOP_RED, colour_pattern_gen
+from networking.constants import SERVICES
 from networking.node import Node
 from utils.config import APP_CONFIG
-from utils.fmt import format_bytes
+from utils.fmt import format_bytes, services_to_str
 from utils.ip import setup_port_forwarding
 
 # TODO: Add a way to record data sent/recv per session in Node
@@ -82,6 +83,11 @@ class NodeFrame(tk.Frame):
         tk.Label(frame_right, text="Data received:", anchor="w").grid(row=4, column=0, sticky="w", padx=5, pady=2)
         self.label_data_received = tk.Label(frame_right, text=f"{format_bytes(self.node.bytes_recv)}", anchor="w", padx=5)
         self.label_data_received.grid(row=4, column=1, sticky="w", padx=5, pady=2)
+        
+        # Services
+        tk.Label(frame_right, text="Services:", anchor="w").grid(row=5, column=0, sticky="w", padx=5, pady=2)
+        self.label_services = tk.Label(frame_right, text=services_to_str(SERVICES), anchor="w", padx=5)
+        self.label_services.grid(row=5, column=1, sticky="w", padx=5, pady=2)
 
 
         # Start periodic updates

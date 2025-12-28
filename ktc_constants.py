@@ -4,7 +4,7 @@
 
 
 # KhetCoin App version
-KTC_VERSION = "0.1.2"
+KTC_VERSION = "0.1.3"
 """Version of this current KhetCoin repo"""
 
 # Genesis Block

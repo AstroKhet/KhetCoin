@@ -289,6 +289,7 @@ class MiningFrame(tk.Frame):
             ]
             self.node.miner.mine(block, cb_outputs)
             
+            self._remove_highlights()
             self._highlight_mempool([tx.hash() for tx in block.get_transactions()])
         else:
             messagebox.showerror("Error", "Something went wrong when generating a candidate block for mining :(")
@@ -390,7 +391,6 @@ class MiningFrame(tk.Frame):
             if self.node.check_updated_blockchain(_frame_id):  # Restart mining if someone else propagates a new valid block that extends the active chain
                 if self.node.block_tip_index.hash != self._last_mined_block_hash:
                     log.info(f"Miner restarted as new block {self.node.block_tip_index.hash} set as block tip.")
-                    log.info("miner shutdown called from mining frame _update")
                     self.node.miner.shutdown()
                     self._start_miner()
                 
