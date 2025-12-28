@@ -257,10 +257,6 @@ class MiningFrame(tk.Frame):
         
         
     def _poll_miner(self):
-        """
-        Polls the event `Miner.mined`
-        \nIf a block is mined, resets `Miner.mined` and then broadcasts the mined block.
-        """
         # 1. Process any mined block
         if (mined_block := self.node.miner.mined_block) is not None:
             self._process_mined_block(mined_block)

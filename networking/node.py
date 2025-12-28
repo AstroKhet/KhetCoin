@@ -381,6 +381,7 @@ class Node:
     
     def set_tip(self, block_index):
         self.block_tip_index = block_index
+        log.info(f"New node tip index: {block_index}")
         self._updated_blockchain = 0
     
     def uptime(self) -> int:

@@ -87,7 +87,6 @@ class Miner:
         cb_tx = build_coinbase_tx(script_sig, cb_outputs)
         header = candidate_block.header
         candidate_block.set_coinbase_tx(cb_tx)
-        
         result_queue = Queue()  # Dedicated queue for each thread
         
         for i in range(self.no_processes):
@@ -119,8 +118,6 @@ class Miner:
                 break
             
             elif status == 1:  # !!! Found nonce !!!
-                self.shutdown()
-                
                 sig_nonce, nonce = value
                 cmds = [int_to_bytes(height, 8), int_to_bytes(sig_nonce, 64)]
                 if miner_tag:
@@ -131,6 +128,8 @@ class Miner:
                 candidate_block.set_coinbase_tx(cb_tx)
                 candidate_block.set_nonce(nonce)
                 self.mined_block = candidate_block
+                
+                self.shutdown()
                 break
             
             elif status == 2: # Hash counter
