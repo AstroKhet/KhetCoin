@@ -107,7 +107,7 @@ class NodeFrame(tk.Frame):
             
         if self.node.external_ip is None:
             self.label_ip_addr.config(text="Error")
-            messagebox.showerror("Invalid IP", "Your IP port was not forwarded properly. Try changing your network port")
+            messagebox.showerror("Invalid IP", "Your IP port was not forwarded properly.", detail="Ensure you are connected to your home router.")
             return
         
         self.label_ip_addr.config(text=f"{self.node.external_ip}:{self.node.port}")
