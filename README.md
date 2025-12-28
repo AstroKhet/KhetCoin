@@ -7,17 +7,6 @@ the basics of a blockchain without spending any money.
 Installation
 ------------
 
-Before you begin, ensure that Git is installed on your system.
-If Git is not installed, download and install it from:
-```
-https://git-scm.com/downloads
-```
-You can verify the installation by running:
-```
-git --version
-```
-Installation Steps
-
 1. Clone this repository:
 
 ```
