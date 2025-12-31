@@ -202,6 +202,18 @@ class Block:
             return False
         height += 1
 
+        # Ensure tx's that references inputs from other tx's in the block are accounted for
+        outpoint_map = {
+            (tx.hash(), i): tx_out 
+            for tx in self._transactions 
+            for i, tx_out in enumerate(tx.outputs)
+        }
+
+        for tx in self._transactions:
+            for tx_in in tx.inputs:
+                if prev_output := outpoint_map.pop((tx_in.prev_tx_hash, tx_in.prev_index), None):
+                    tx_in._prev_output = prev_output
+                    
         block_subsidy = calculate_block_subsidy(height)
         fees = sum(tx.fee() for tx in self._transactions)
         block_reward = sum(out.value for out in coinbase_tx.outputs)

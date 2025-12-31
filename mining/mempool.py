@@ -106,7 +106,6 @@ class Mempool:
             # Check if any outputs satisfy as parents to orphan txs
             outpoint = (tx_hash, i)
             if orphan_tx_hash := self._orphan_registry.get(outpoint):
-                print(f"Adding orphan {tx.hash().hex()}")
                 self._orphan_missing_utxo[orphan_tx_hash].remove(outpoint)
 
                 if not self._orphan_missing_utxo[orphan_tx_hash]:
