@@ -1,6 +1,7 @@
 import time
 import tkinter as tk
 from tkinter import ttk
+from tkinter import messagebox
 
 from blockchain.transaction import Transaction
 from gui.common.columns import MEMPOOL_TX_COLS
@@ -155,15 +156,17 @@ class MempoolFrame(tk.Frame):
             label_value.grid(row=r, column=1, sticky="w", padx=5, pady=5)
  
     def _on_tx_select(self, type_: str):
-        selection = self.tree_valid_txs.selection()
-        if not selection:
-             return
-        
-        tx_hash = bytes.fromhex(selection[0])
-        tx = self.node.mempool.get_valid_tx(tx_hash)
-        if tx:
-            self._selected_tx = tx
-            tx_popup(self, tx, type_)
+        if type_ == "valid":
+            selection = self.tree_valid_txs.selection()
+            tx_hash = bytes.fromhex(selection[0])
+            tx = self.node.mempool.get_valid_tx(tx_hash)
+        else:
+            selection = self.tree_orphan_txs.selection()
+            tx_hash = bytes.fromhex(selection[0])
+            tx = self.node.mempool.get_orphan_tx(tx_hash)
+
+        self._selected_tx = tx
+        tx_popup(self, tx, type_)
 
     def _update(self):
         if not self._is_active:

@@ -37,6 +37,9 @@ class Node:
         self.mempool = Mempool(self)
         self.miner = Miner()
         
+        self.mempool.load_mempool()
+        log.info(f"Mempool loaded with {len(self.mempool._valid_txs)} transactions.")
+        
         # Clients (peers)
         self.next_peer_id: int = 0
         self.peer_id_lookup: dict = dict()
@@ -68,9 +71,6 @@ class Node:
         
         log.info(f"Node accessible via {self.external_ip}:{self.port}")
         
-        self.mempool.load_mempool()
-        log.info(f"Mempool loaded with {len(self.mempool._valid_txs)} transactions.")
-        
 
         log.info("Spawning Node startup tasks...")
         self.spawn(self._start_server())
@@ -84,7 +84,10 @@ class Node:
 
         log.info(f"Shutdown requested. Cleaning up...")
         await self._close_server()
-        log.info(f"Node finished.")
+        
+        self.loop.stop()
+        # asyncio.get_event_loop().stop()
+        log.info(f"Loop stopped. Node finished.")
         
     async def shutdown(self):
         log.info(f"External shutdown triggered.")
@@ -112,6 +115,7 @@ class Node:
         self.is_running = False
         self.server_start_time = 0
 
+        log.info("saving into mempool lmdb")
         self.mempool.save_mempool()
         log.info(
             f"Mempool saved with "

@@ -137,7 +137,26 @@ class KhetcoinApp:
             self._shutdown()
 
     def _shutdown(self):
+        log.info("Initiating application shutdown...")
+        
         asyncio.run_coroutine_threadsafe(self.node.shutdown(), self.node_loop)
-        self.node_loop.call_soon_threadsafe(self.node_loop.stop)
         self.node.miner.shutdown()
-        self.root.destroy()
+        if not self.node.is_running:
+            self.node_loop.call_soon_threadsafe(self.node_loop.stop)
+        self._shutdown_poll_counter = 0
+        self._monitor_shutdown()
+
+    def _monitor_shutdown(self):
+        self._shutdown_poll_counter += 1
+        
+        # Check if the thread is still running
+        if self.node_thread.is_alive():
+            if self._shutdown_poll_counter > 50: # Force quit if its taking over 5s
+                log.warning("Shutdown timed out. Forcing exit.")
+                self.root.destroy()
+            else: # Check again in 100ms
+                self.root.after(100, self._monitor_shutdown)
+        else:
+            # Node thread is finished.
+            log.info("Node thread stopped successfully. Destroying GUI.")
+            self.root.destroy()

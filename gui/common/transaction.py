@@ -32,7 +32,6 @@ def tx_popup(parent, tx: Transaction, type_: str):
         frame_main.columnconfigure(0, weight=1)
         frame_main.rowconfigure(0, weight=1)
 
-
         # 1. Full list of inputs and outputs
         frame_details, cnv_details = create_scrollable_frame(win, xscroll=False)
         frame_details.columnconfigure(0, weight=1)
@@ -48,7 +47,6 @@ def tx_popup(parent, tx: Transaction, type_: str):
 
         for i, tx_in in enumerate(tx.inputs, start=1):
             script_sig = tx_in.script_sig
-            script_pk = tx_in.fetch_script_pubkey()
             if tx.is_coinbase():
                 addr = "Coinbase"
             else:
@@ -61,13 +59,10 @@ def tx_popup(parent, tx: Transaction, type_: str):
 
             wif_addr = wif_encode(addr)
             tk.Label(frame_input, text=f"{i}. {wif_addr}").grid(row=0, column=0, sticky="w")
-            ttk.Button(frame_input, text="Copy", width=5,
-                    command=lambda a=wif_addr: copy_to_clipboard(parent, a)
-            ).grid(row=0, column=1)
-            ttk.Button(frame_input, text="Script", width=6,
-                    command=lambda sig=script_sig, pk=script_pk: script_popup(parent, sig, pk, tx.hash())
-            ).grid(row=0, column=2)
-
+            ttk.Button(frame_input, text="Copy", width=5, command=lambda a=wif_addr: copy_to_clipboard(parent, a)).grid(row=0, column=1)
+            
+            script_pk = tx_in.fetch_script_pubkey()
+            ttk.Button(frame_input, text="Script", width=6, command=lambda sig=script_sig, pk=script_pk: script_popup(parent, sig, pk, tx.hash())).grid(row=0, column=2)
             tk.Label(frame_input, text=value, fg="gray").grid(row=1, column=0, sticky="w")
 
         # Outputs

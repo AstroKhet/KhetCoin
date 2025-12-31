@@ -2,7 +2,7 @@
 import re
 import string
 
-from ktc_constants import KTC
+from ktc_constants import KTC, MAX_KTC
 from math import isclose
 
 def register_VCMD_INT(parent):
@@ -26,20 +26,33 @@ def register_VCMD_wif_prefix(parent):
 
     
 # Auxillary functions
-_real_re = re.compile(r'^\d*\.?\d*$')
 def _validate_KTC(new):
-    if new == "" or new == ".":
+    if new == "":
         return True
-    if not _real_re.match(new):
+
+    if new == ".":
+        return True
+
+    if not re.match(r'^\d*\.?\d*$', new):
         return False
+
+    if "." in new:
+        try:
+            integer_part, decimal_part = new.split(".")
+        except ValueError:
+            return False # Handle edge cases with multiple dots if regex fails
+        
+        if len(decimal_part) > 8:
+            return False
 
     try:
         val = float(new)
+        if 0 <= val <= MAX_KTC:
+            return True
+        else:
+            return False
     except ValueError:
         return False
-    
-    val_khets = val * KTC
-    return isclose(val_khets, round(val_khets), rel_tol=0.0, abs_tol=1e-3)  # To deal with floating point precision error
 
 
 _filename_chars = f"-_.() {string.ascii_letters}{string.digits}"

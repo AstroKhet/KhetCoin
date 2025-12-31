@@ -109,7 +109,7 @@ def get_utxo_set_to_addr(addr: bytes) -> set[UTXO]:
     """
     Retrieves all UTXOs that pay to `addr`
     """
-    # TODO: UTXO set caching
+
     utxo_set = set()
     with LMDB_ENV.begin(db=ADDR_DB) as db:
         cur = db.cursor()
@@ -118,17 +118,18 @@ def get_utxo_set_to_addr(addr: bytes) -> set[UTXO]:
                 if tx_out := get_utxo(op):
                     tx_hash = op[:32]
                     idx = bytes_to_int(op[32:36])
-                    utxo_set.add(
-                        UTXO(
-                            owner=addr,
-                            value=tx_out.value,
-                            tx_hash=tx_hash,
-                            index=idx,    
-                            timestamp=get_tx_timestamp(tx_hash) or 0,
-                            script_pubkey=tx_out.script_pubkey
+                    if tx_out.value != 0:
+                        utxo_set.add(
+                            UTXO(
+                                owner=addr,
+                                value=tx_out.value,
+                                tx_hash=tx_hash,
+                                index=idx,    
+                                timestamp=get_tx_timestamp(tx_hash) or 0,
+                                script_pubkey=tx_out.script_pubkey
+                            )
                         )
-                    )
-        
+            
         return utxo_set
 
 

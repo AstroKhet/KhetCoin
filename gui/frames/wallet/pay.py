@@ -202,21 +202,26 @@ class PayFrame(tk.Frame):
             
     def _unit_conversion(self, var_value, var_unit: tk.StringVar, sb: tk.Spinbox):
         new_unit = var_unit.get()
-        if sb.cget('increment') == 0.01:
-            old_unit = "KTC"
-        else:
-            old_unit = "khets"
-            
+        
+        is_currently_ktc = (float(sb.cget('increment')) == 0.01)
+        old_unit = "KTC" if is_currently_ktc else "khets"
+        
+        if new_unit == old_unit:
+            return 
+
+        current_val = float(var_value.get())
         if new_unit == "KTC": 
-            if old_unit == "KTC":
-                return
-            var_value.set(var_value.get() / KTC)
-            sb.config(increment=0.01, format="%.8f", textvariable=var_value, validate="key", validatecommand=self.vcmd_KTC)
-        elif new_unit == "khets":  
-            if old_unit == "khets":
-                return
-            var_value.set(var_value.get() * KTC)
-            sb.config(increment=1, format="%.0f", textvariable=var_value, validate="key", validatecommand=self.vcmd_khets)
+            result = current_val / KTC
+            var_value.set(f"{result:.8f}".rstrip('0').rstrip('.')) 
+            if var_value.get() == "": var_value.set("0") 
+            
+            sb.config(increment=0.01, format="%.8f", validate="key", validatecommand=self.vcmd_KTC)
+
+        elif new_unit == "khets":
+            result = int(round(current_val * KTC))
+            var_value.set(str(result)) 
+            
+            sb.config(increment=1, format="%.0f", validate="key", validatecommand=self.vcmd_khets)
             
     def _get_fee_rate(self):
         """

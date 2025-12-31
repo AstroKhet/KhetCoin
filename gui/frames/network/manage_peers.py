@@ -203,7 +203,7 @@ class ManagePeersFrame(tk.Frame):
             "Min Ping": "N/A" if not peer.ping_times else f"{min(peer.ping_times)}ms",
             "Last Ping": "N/A" if not peer.ping_times else f"{peer.ping_times[-1]}ms",
             "Avg. Ping": "N/A" if not peer.ping_times else f"{round(sum(peer.ping_times)/len(peer.ping_times))}ms",
-            "Time Offset": format_age(peer.time_offset),
+            "Time Offset": f"{peer.time_offset}s",
         }
 
         for field_name, label_widget in self.labels_peer_details.items():

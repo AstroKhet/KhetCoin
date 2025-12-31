@@ -2,7 +2,7 @@ import logging
 import time
 
 from blockchain.transaction import Transaction
-from db.mempool import load_mempool, save_mempool
+from db.mempool import load_mempool_lmdb, save_mempool_lmdb
 from db.tx import get_tx_exists, get_tx_timestamp
 from db.utxo import UTXO, get_utxo
 from networking.constants import TX_TYPE
@@ -106,6 +106,7 @@ class Mempool:
             # Check if any outputs satisfy as parents to orphan txs
             outpoint = (tx_hash, i)
             if orphan_tx_hash := self._orphan_registry.get(outpoint):
+                print(f"Adding orphan {tx.hash().hex()}")
                 self._orphan_missing_utxo[orphan_tx_hash].remove(outpoint)
 
                 if not self._orphan_missing_utxo[orphan_tx_hash]:
@@ -123,14 +124,18 @@ class Mempool:
         which is either "valid" | "orphan" | "invalid"
         """
         tx_hash = tx.hash()
-        status = "valid"
         tx_in_statuses = []
         log.info(f"Checking mempool eligibility for TX<{tx_hash.hex()}>")
         
         if tx.is_coinbase():
             log.warning("Coinbase transactions should not be relayed. Rejected from mempool.")
-            return "invalid"
-
+            return ["invalid"]
+        
+        for i, tx_out in enumerate(tx.outputs):
+            if tx_out.value == 0:
+                log.info(f"Input[{i}] has a value of 0KTC, rejected from mempool")
+                return ["invalid"]
+                
         for i, tx_in in enumerate(tx.inputs):
             prev_tx_hash = tx_in.prev_tx_hash
             prev_id = tx_in.prev_index
@@ -194,6 +199,7 @@ class Mempool:
                     
                 # 2.1.3 NO prev_tx | YES prev_tx in mempool | YES prev_id in mempool | YES verified
                     else:
+                        tx_in._prev_output = tx_out
                         tx_in_statuses.append("valid")
                         continue
                 
@@ -263,7 +269,7 @@ class Mempool:
         
 
     def load_mempool(self):
-        raw_txs = load_mempool()
+        raw_txs = load_mempool_lmdb()
         for raw_tx in raw_txs:
             try:
                 tx = Transaction.parse(raw_tx)
@@ -272,8 +278,9 @@ class Mempool:
                 pass
         
     def save_mempool(self):
-        raw_txs = list(self._valid_txs.values()) + list(self._orphan_txs.values())
-        save_mempool(raw_txs)
+        txs = list(self._valid_txs.values()) + list(self._orphan_txs.values())
+        raw_txs = [tx.serialize() for tx in txs]
+        save_mempool_lmdb(raw_txs)
         
         
     # Modifiers for transient GUI variables
