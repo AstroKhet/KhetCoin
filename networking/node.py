@@ -86,7 +86,6 @@ class Node:
         await self._close_server()
         
         self.loop.stop()
-        # asyncio.get_event_loop().stop()
         log.info(f"Loop stopped. Node finished.")
         
     async def shutdown(self):
@@ -144,7 +143,6 @@ class Node:
             task.cancel()
 
         awaitables = []
-
         for peer in peers_to_close:
             awaitables.append(peer.close())
 

@@ -260,7 +260,7 @@ class ViewBlockchainFrame(tk.Frame):
                 meta.no_txs,
                 format_bytes(meta.full_block_size),
                 f"{meta.total_sent/KTC:.2f}KTC",
-                f"{meta.fee/KTC:.2f}KTC",
+                f"{meta.fee/KTC:.8f}KTC",
                 format_epoch(meta.timestamp)
             )
 
